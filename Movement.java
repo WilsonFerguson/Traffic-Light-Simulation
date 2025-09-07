@@ -225,9 +225,6 @@ class Movement extends PComponent implements EventIgnorer {
     }
 
     public void begin(Phase phase, Phase outboundPhase) {
-        if (!waitingTraffic())
-            return;
-
         this.phase = phase;
         int changeTime = frameCount;
 
@@ -408,18 +405,11 @@ class Movement extends PComponent implements EventIgnorer {
                     .get((IntersectionManager.currentPhaseIndex + 1) % IntersectionManager.phases.size()).movements
                     .contains(this);
             if (enoughTime || inNextPhase) {
-                // signalTimeline.put(changeTime, Signal.GREEN);
-                // changingGreen = true;
-                // changingRed = false;
-                IntersectionManager.submitBid(new Bid(this, changeTime, waitingTrafficCount()));
+                signalTimeline.put(changeTime, Signal.GREEN);
+                changingGreen = true;
+                changingRed = false;
             }
         }
-    }
-
-    public void awardBid(Bid bid) {
-        signalTimeline.put(bid.changeTime, Signal.GREEN);
-        changingGreen = true;
-        changingRed = false;
     }
 
     public void draw() {
@@ -527,14 +517,12 @@ class Movement extends PComponent implements EventIgnorer {
         rect(PVector.zero(), signalRadius * 2, signalRadius * 4, signalRadius * 2);
         noStroke();
 
-        fill(Settings.RED, signal == Signal.RED ? 255 : 40);
-        circle(new PVector(0, -signalRadius * 1.1), signalRadius);
-
-        fill(Settings.GREEN, signal == Signal.GREEN ? 255 : 40);
-        circle(new PVector(0, signalRadius * 1.1), signalRadius);
-
-        fill(Settings.YELLOW, signal == Signal.YELLOW ? 255 : 40);
-        circle(PVector.zero(), signalRadius);
+        drawTrafficLightSymbol(new PVector(0, -signalRadius * 1.1),
+                color(Settings.RED, signal == Signal.RED ? 255 : 40), signalRadius);
+        drawTrafficLightSymbol(new PVector(0, signalRadius * 1.1),
+                color(Settings.GREEN, signal == Signal.GREEN ? 255 : 40), signalRadius);
+        drawTrafficLightSymbol(PVector.zero(), color(Settings.YELLOW, signal == Signal.YELLOW ? 255 : 40),
+                signalRadius);
 
         // Draw estimated time until green
         int timeUntilGreen = estimatedTimeUntilGreen();
@@ -563,8 +551,28 @@ class Movement extends PComponent implements EventIgnorer {
         pop();
     }
 
+    private void drawTrafficLightSymbol(PVector pos, color col, float signalRadius) {
+        if (type == MovementType.CAR_RIGHT) {
+            strokeWeight(2);
+            stroke(col);
+            line(pos.x - signalRadius * 0.3, pos.y + 0, pos.x + signalRadius * 0.3, pos.y + 0);
+            line(pos.x + 0, pos.y - signalRadius * 0.3, pos.x + signalRadius * 0.3, pos.y + 0);
+            line(pos.x + 0, pos.y + signalRadius * 0.3, pos.x + signalRadius * 0.3, pos.y + 0);
+        } else if (type == MovementType.CAR_LEFT) {
+            strokeWeight(2);
+            stroke(col);
+            line(pos.x + signalRadius * 0.3, pos.y + 0, pos.x - signalRadius * 0.3, pos.y + 0);
+            line(pos.x + 0, pos.y - signalRadius * 0.3, pos.x - signalRadius * 0.3, pos.y + 0);
+            line(pos.x + 0, pos.y + signalRadius * 0.3, pos.x - signalRadius * 0.3, pos.y + 0);
+        } else {
+            noStroke();
+            fill(col);
+            circle(pos, signalRadius);
+        }
+    }
+
     public int estimatedTimeUntilGreen() {
-        if (changingRed || signal != Signal.RED || !waitingTraffic())
+        if (signal != Signal.RED || !waitingTraffic())
             return -1;
 
         if (changingGreen) {
@@ -590,7 +598,8 @@ class Movement extends PComponent implements EventIgnorer {
         }
         // Return: time left of current phase + waitedPhases * max time of phase
         Phase currentPhase = IntersectionManager.phases.get(index);
-        int currentPhaseTime = currentPhase.maximumTypicalGreenTime - (frameCount - currentPhase.phaseStartTime);
+        int currentPhaseTime = max(currentPhase.maximumTypicalGreenTime - (frameCount - currentPhase.phaseStartTime),
+                0);
         int waitedPhasesTime = waitedPhases * currentPhase.maximumTypicalGreenTime;
         // Let's also add on a yellowTime + exitTime because we have calculated up until
         // the conflicting movement will turn yellow, but we probably won't go

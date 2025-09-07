@@ -11,6 +11,9 @@ class Person extends PComponent implements EventIgnorer {
     float acceleration;
     boolean move;
 
+    int movingTimer = -1;
+    int movingDelay = ceil(0.35 * 60);
+
     public Person(Movement movement, float maxSpeed, float acceleration) {
         this.movement = movement;
         movement.addTraffic(this);
@@ -32,11 +35,23 @@ class Person extends PComponent implements EventIgnorer {
                 if (currentIndex >= movement.path.size() - 1) {
                     return true;
                 }
+
+                if (speed == 0) {
+                    movingTimer = frameCount + movingDelay;
+                    currentIndex--;
+                }
             }
         }
 
         if (!move) {
             speed = 0;
+            return false;
+        }
+
+        if (movingTimer != -1 && frameCount >= movingTimer) {
+            currentIndex++;
+            movingTimer = -1;
+        } else if (movingTimer != -1 && frameCount < movingTimer) {
             return false;
         }
 

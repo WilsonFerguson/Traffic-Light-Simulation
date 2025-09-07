@@ -18,7 +18,7 @@ class Sketch extends Applet {
 
     float speedBike = 4.16f * unitsPerMeter / 60.0f;
     float speedCar = 8.3f * unitsPerMeter / 60.0f;
-    float speedCarTurn = 5 * unitsPerMeter / 60.0f;
+    float speedCarTurn = 7 * unitsPerMeter / 60.0f; // 5
     float speedWalk = 1.4f * unitsPerMeter / 60.0f;
 
     int yellowCarTurn = 3 * 60;
@@ -229,7 +229,7 @@ class Sketch extends Applet {
 
         IntersectionManager.update();
 
-        // drawIntersectionMarkings();
+        drawIntersectionMarkings();
 
         for (Movement movement : movementsCars) {
             if (movement.signal == Signal.RED)
@@ -318,11 +318,34 @@ class Sketch extends Applet {
     public void createPerson() {
         Movement movement = movements.get(getWeightedRandomMovement());
         Person person = null;
-        if (movement.type == MovementType.BIKE_STRAIGHT) {
-            person = new Person(movement, speedBike, accelerationBike);
-        } else {
-            person = new Person(movement, speedCar, accelerationCar);
+        // if (movement.type == MovementType.BIKE_STRAIGHT) {
+        // person = new Person(movement, speedBike, accelerationBike);
+        // } else {
+        // person = new Person(movement, speedCar, accelerationCar);
+        // }
+        float speed = speedCar;
+        float acceleration = accelerationCar;
+        switch (movement.type) {
+            case BIKE_STRAIGHT:
+                speed = speedBike;
+                acceleration = accelerationBike;
+                break;
+            case CAR_STRAIGHT:
+                speed = speedCar;
+                acceleration = accelerationCar;
+                break;
+            case CAR_RIGHT:
+                speed = speedCarTurn;
+                acceleration = accelerationCar;
+                break;
+            case CAR_LEFT:
+                speed = speedCarTurn;
+                acceleration = accelerationCar;
+                break;
+            case PEDESTRIAN:
+                break;
         }
+        person = new Person(movement, speed, acceleration);
         traffic.add(person);
     }
 
