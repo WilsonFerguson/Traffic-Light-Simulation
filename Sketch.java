@@ -3,6 +3,7 @@ import java.util.*;
 
 class Sketch extends Applet {
 
+    Road[] roads;
     ArrayList<Movement> movements;
     ArrayList<Movement> movementsCars;
     ArrayList<Movement> movementsBikes;
@@ -11,24 +12,21 @@ class Sketch extends Applet {
     ArrayList<Integer> timeWaitingCars;
     ArrayList<Integer> timeWaitingBikes;
 
-    float centerMedian;
-
     public static int unitsPerMeter = 10;
 
-    float accelerationBike = 0.231f * unitsPerMeter / 60.0f;
-    float accelerationCar = 1.75f * unitsPerMeter / 60.0f;
+    public static float accelerationBike = 0.231f * unitsPerMeter / 60.0f;
+    public static float accelerationCar = 1.75f * unitsPerMeter / 60.0f;
 
-    float speedBike = 4.16f * unitsPerMeter / 60.0f;
-    float speedCar = 8.3f * unitsPerMeter / 60.0f;
-    float speedCarTurn = 7 * unitsPerMeter / 60.0f; // 5
-    float speedWalk = 1.4f * unitsPerMeter / 60.0f;
+    public static float speedBike = 4.16f * unitsPerMeter / 60.0f;
+    public static float speedCar = 8.3f * unitsPerMeter / 60.0f;
+    public static float speedCarTurn = 7 * unitsPerMeter / 60.0f; // 5
+    public static float speedWalk = 1.4f * unitsPerMeter / 60.0f;
 
-    int yellowCarTurn = 3 * 60;
-    int yellowCarStraight = ceil(3.5 * 60);
-    int yellowBike = 2 * 60;
-    int yellowWalk = ceil(2.5 * 60);
+    public static int yellowCar = (int) Math.ceil(3.5 * 60);
+    public static int yellowBike = 2 * 60;
+    public static int yellowWalk = (int) Math.ceil(2.5 * 60);
 
-    int greenTime = 4 * 60;
+    public static int greenTime = 4 * 60;
     int maximumTypicalGreenTime = 13 * 60;
 
     /**
@@ -37,8 +35,9 @@ class Sketch extends Applet {
      */
     public static boolean tegelijkGroen = false;
 
-    int laneWidthCar = 3 * unitsPerMeter;
-    int laneWidthBike = 2 * unitsPerMeter;
+    public static int laneWidthCar = 3 * unitsPerMeter;
+    public static int laneWidthBike = 2 * unitsPerMeter;
+    public static float centerMedian;
 
     public void setup() {
         size(1200, 1200);
@@ -57,14 +56,33 @@ class Sketch extends Applet {
         timeWaitingCars = new ArrayList<Integer>();
         timeWaitingBikes = new ArrayList<Integer>();
 
-        // North
-        createMovementDirection(0);
-        // South
-        createMovementDirection(PI);
-        // East
-        createMovementDirection(PI / 2);
-        // West
-        createMovementDirection(-PI / 2);
+        // // North
+        // createMovementDirection(0);
+        // // South
+        // createMovementDirection(PI);
+        // // East
+        // createMovementDirection(PI / 2);
+        // // West
+        // createMovementDirection(-PI / 2);
+
+        roads = new Road[4];
+        roads[0] = new Road(0).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
+        roads[1] = new Road(-PI / 2).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
+        roads[2] = new Road(PI).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
+        roads[3] = new Road(PI / 2).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
+
+        for (int i = 0; i < 4; i++) {
+            roads[i].getOtherRoads(roads, i);
+        }
+        for (Road road : roads) {
+            road.createStartPoints();
+        }
+        for (Road road : roads) {
+            road.createEndPoints();
+        }
+        for (Road road : roads) {
+            road.createMovements(movements, movementsCars, movementsBikes);
+        }
 
         for (Movement movement : movements) {
             movement.calculateClearanceTimes(laneWidthCar / 5.0f);
@@ -72,37 +90,38 @@ class Sketch extends Applet {
 
         IntersectionManager.movements = movements;
         if (!tegelijkGroen) {
-            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 4, 6, 7, 9);
-            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 5, 3, 18, 8, 13);
-            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 19, 16, 17, 11, 12, 14);
-            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 10, 15, 3, 18, 8, 13);
+            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 4, 11, 12, 14);
+            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 10, 3, 8, 13, 18);
+            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 6, 7, 9, 16, 17, 19);
+            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 5, 15, 3, 8, 13, 18);
             IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
         } else {
-            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 3, 7, 8, 9);
-            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 6, 3, 21, 9, 15);
-            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 13, 14, 19, 20, 15, 21);
-            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 12, 18, 3, 21, 9, 15);
-            Phase phase5 = new Phase(maximumTypicalGreenTime, movements, 5, 4, 22, 23, 10, 11, 16, 17);
-            IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
+            // Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 3, 7, 8, 9);
+            // Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 6, 3, 21, 9, 15);
+            // Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 13, 14, 19, 20, 15, 21);
+            // Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 12, 18, 3, 21, 9, 15);
+            // Phase phase5 = new Phase(maximumTypicalGreenTime, movements, 5, 4, 22, 23, 10, 11, 16, 17);
+            // IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
+            throw new RuntimeException("Phases not implemented with the new numbers");
         }
 
         IntersectionManager.start();
     }
 
     public void createMovementDirection(float rotation) {
-        Movement carLeft = new Movement(movements, MovementType.CAR_LEFT, greenTime, yellowCarTurn, speedCarTurn,
+        Movement carLeft = new Movement(movements, MovementType.CAR_LEFT, greenTime, yellowCar, speedCarTurn,
                 laneWidthCar,
                 accelerationCar,
                 Settings.PATH_CAR);
-        Movement carStraight1 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCarStraight,
+        Movement carStraight1 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCar,
                 speedCar,
                 laneWidthCar, accelerationCar,
                 Settings.PATH_CAR);
-        Movement carStraight2 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCarStraight,
+        Movement carStraight2 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCar,
                 speedCar,
                 laneWidthCar, accelerationCar,
                 Settings.PATH_CAR);
-        Movement carRight = new Movement(movements, MovementType.CAR_RIGHT, greenTime, yellowCarTurn, speedCarTurn,
+        Movement carRight = new Movement(movements, MovementType.CAR_RIGHT, greenTime, yellowCar, speedCarTurn,
                 laneWidthCar,
                 accelerationCar,
                 Settings.PATH_CAR);
@@ -300,7 +319,7 @@ class Sketch extends Applet {
 
         // Draw traffic lights at end so they are on top
         for (Movement movement : movements) {
-            movement.drawTrafficLight();
+            movement.drawTrafficLightAndStopline();
         }
 
         for (int i = traffic.size() - 1; i >= 0; i--) {
@@ -358,13 +377,12 @@ class Sketch extends Applet {
 
     void drawIntersectionMarkings() {
         noStroke();
-        rectMode(CENTER);
+        rectMode(CORNER);
 
         fill(Settings.ROAD_BACKGROUND);
-        square(PVector.center(), laneWidthCar * 13);
-
-        fill(Settings.ROAD_BACKGROUND);
-        square(PVector.center(), centerMedian * 2);
+        PVector bottomRight = new PVector(roads[0].movementStartPointsX[roads[0].movements.length - 1], roads[3].movements[roads[3].movements.length - 1].path.get(0).y);
+        PVector topLeft = new PVector(roads[2].movements[roads[2].movements.length - 1].path.get(0).x, roads[1].movements[roads[1].movements.length - 1].path.get(0).y);
+        rect(topLeft, PVector.sub(bottomRight, topLeft));
     }
 
     String temp = "";

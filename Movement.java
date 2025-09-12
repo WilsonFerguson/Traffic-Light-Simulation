@@ -516,9 +516,7 @@ class Movement extends PComponent implements EventIgnorer {
         endShape();
     }
 
-    public void drawTrafficLight() {
-        // float dir = PVector.angleBetween(PVector.sub(pathIntro.get(1),
-        // pathIntro.get(0)), new PVector(0, 1));
+    public void drawTrafficLightAndStopline() {
         PVector diff = PVector.sub(pathIntro.get(1), pathIntro.get(0));
         float dir = 0;
         // From:
@@ -532,9 +530,14 @@ class Movement extends PComponent implements EventIgnorer {
             dir = 0;
 
         float signalRadius = laneWidth / 2.2f;
+        float w = signalRadius * 0.3f;
+        float h = signalRadius * 2;
+        float startY = -h;
 
         push();
-        translate(pathIntersection.get(0));
+        PVector translation = pathIntersection.get(0).copy();
+        translation.add(PVector.fromAngle(dir).rotate(PI / 2).mult(h * 1.3));
+        translate(translation);
         rotate(dir);
         stroke(200);
         strokeWeight(2);
@@ -556,10 +559,6 @@ class Movement extends PComponent implements EventIgnorer {
         noStroke();
         rectMode(CORNER);
 
-        float w = signalRadius * 0.3f;
-        float h = signalRadius * 2;
-        float startY = -h;
-
         fill(0);
         rect(-signalRadius - w, startY, w, signalRadius * 4);
 
@@ -573,6 +572,20 @@ class Movement extends PComponent implements EventIgnorer {
                 circle(-signalRadius - w / 2, y, w / 2);
             }
         }
+
+        // Stopline
+        noStroke();
+        fill(160);
+        rectMode(CENTER);
+        PVector offset = PVector.sub(pathIntro.get(1), pathIntro.get(0)).normalize().rotate(-PI / 2)
+                .mult(laneWidth);
+        if (offset.x == 0)
+            offset.x = 3;
+        else
+            offset.y = 3;
+
+        translate(PVector.fromAngle(dir).rotate(PI / 2).mult(-h * 1.3));
+        rect(PVector.zero(), offset);
 
         pop();
     }
@@ -637,6 +650,13 @@ class Movement extends PComponent implements EventIgnorer {
         strokeWeight(2);
         rectMode(CENTER);
         rect(pathIntro.get(sensorIndex), laneWidth * 0.8, laneWidth * 0.5);
+    }
+
+    public void printPath() {
+        for (PVector node : pathIntersection) {
+            print(node);
+        }
+        println();
     }
 
 }
