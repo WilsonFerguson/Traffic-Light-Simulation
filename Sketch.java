@@ -8,6 +8,8 @@ class Sketch extends Applet {
     ArrayList<Movement> movementsBikes;
 
     ArrayList<Person> traffic;
+    ArrayList<Integer> timeWaitingCars;
+    ArrayList<Integer> timeWaitingBikes;
 
     float centerMedian;
 
@@ -27,7 +29,13 @@ class Sketch extends Applet {
     int yellowWalk = ceil(2.5 * 60);
 
     int greenTime = 4 * 60;
-    int maximumTypicalGreenTime = 10 * 60;
+    int maximumTypicalGreenTime = 13 * 60;
+
+    /**
+     * If true, then bikes will only use tegelijk groen. If false, they will never
+     * use it.
+     */
+    public static boolean tegelijkGroen = false;
 
     int laneWidthCar = 3 * unitsPerMeter;
     int laneWidthBike = 2 * unitsPerMeter;
@@ -36,6 +44,9 @@ class Sketch extends Applet {
         size(1200, 1200);
         frameRate(60);
 
+        if (tegelijkGroen)
+            maximumTypicalGreenTime = 20 * 60;
+
         centerMedian = width / 15;
 
         movements = new ArrayList<Movement>();
@@ -43,6 +54,8 @@ class Sketch extends Applet {
         movementsBikes = new ArrayList<Movement>();
 
         traffic = new ArrayList<Person>();
+        timeWaitingCars = new ArrayList<Integer>();
+        timeWaitingBikes = new ArrayList<Integer>();
 
         // North
         createMovementDirection(0);
@@ -58,11 +71,20 @@ class Sketch extends Applet {
         }
 
         IntersectionManager.movements = movements;
-        Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 4, 6, 7, 9);
-        Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 5, 3, 18, 8, 13);
-        Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 19, 16, 17, 11, 12, 14);
-        Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 10, 15, 3, 18, 8, 13);
-        IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
+        if (!tegelijkGroen) {
+            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 4, 6, 7, 9);
+            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 5, 3, 18, 8, 13);
+            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 19, 16, 17, 11, 12, 14);
+            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 10, 15, 3, 18, 8, 13);
+            IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
+        } else {
+            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 3, 7, 8, 9);
+            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 6, 3, 21, 9, 15);
+            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 13, 14, 19, 20, 15, 21);
+            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 12, 18, 3, 21, 9, 15);
+            Phase phase5 = new Phase(maximumTypicalGreenTime, movements, 5, 4, 22, 23, 10, 11, 16, 17);
+            IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
+        }
 
         IntersectionManager.start();
     }
@@ -87,6 +109,9 @@ class Sketch extends Applet {
         Movement bikeStraight = new Movement(movements, MovementType.BIKE_STRAIGHT, greenTime, yellowBike, speedBike,
                 laneWidthBike, accelerationBike,
                 Settings.PATH_BIKE);
+        Movement bikeTegelijk = new Movement(movements, MovementType.BIKE_TEGELIJK, greenTime, yellowBike, speedBike,
+                laneWidthBike, accelerationBike,
+                Settings.PATH_BIKE);
         // TODO: peds
 
         ArrayList<Movement> movementsTemp = new ArrayList<Movement>();
@@ -95,6 +120,8 @@ class Sketch extends Applet {
         movementsTemp.add(carStraight2);
         movementsTemp.add(carRight);
         movementsTemp.add(bikeStraight);
+        if (tegelijkGroen)
+            movementsTemp.add(bikeTegelijk);
 
         float centerX = width / 2 + centerMedian / 2;
         float stopLineCars = height / 2 + centerMedian / 2 + laneWidthCar * 6 + laneWidthBike;
@@ -124,8 +151,6 @@ class Sketch extends Applet {
             xInc = map(i, 0, n, finalX, finalX - laneWidthCar * 3.5);
             carLeft.addIntersectionNode(xInc, finalY);
         }
-        // carLeft.addExitNode(xInc, finalY);
-        // carLeft.addExitNode(0, finalY);
         generateStraightExits(carLeft, xInc, finalY, 0, finalY);
 
         centerX += laneWidthCar;
@@ -137,8 +162,6 @@ class Sketch extends Applet {
         for (int i = 0; i <= n; i++) {
             carStraight1.addIntersectionNode(centerX, map(i, 0, n, stopLineCars, finalY));
         }
-        // carStraight1.addExitNode(centerX, finalY);
-        // carStraight1.addExitNode(centerX, 0);
         generateStraightExits(carStraight1, centerX, finalY, centerX, 0);
 
         centerX += laneWidthCar;
@@ -148,8 +171,6 @@ class Sketch extends Applet {
         for (int i = 0; i <= n; i++) {
             carStraight2.addIntersectionNode(centerX, map(i, 0, n, stopLineCars, finalY));
         }
-        // carStraight2.addExitNode(centerX, finalY);
-        // carStraight2.addExitNode(centerX, 0);
         generateStraightExits(carStraight2, centerX, finalY, centerX, 0);
 
         centerX += laneWidthCar;
@@ -177,8 +198,6 @@ class Sketch extends Applet {
             xInc = map(i, 0, n, xCurr, xCurr + laneWidthCar * 1.5);
             carRight.addIntersectionNode(xInc, finalY);
         }
-        // carRight.addExitNode(xInc, finalY);
-        // carRight.addExitNode(width, finalY);
         generateStraightExits(carRight, xInc, finalY, width, finalY);
 
         centerX += laneWidthCar * 2;
@@ -190,12 +209,33 @@ class Sketch extends Applet {
         for (int i = 0; i <= n; i++) {
             bikeStraight.addIntersectionNode(centerX, map(i, 0, n, stopLineBikes, finalY));
         }
-        // bikeStraight.addExitNode(centerX, finalY);
-        // bikeStraight.addExitNode(centerX, 0);
         generateStraightExits(bikeStraight, centerX, finalY, centerX, 0);
+
+        // Bikes tegelijk (so left turn here)
+        if (tegelijkGroen) {
+            // Move the bikes slightly over so they queue up on the left side of the (now
+            // slightly wider) bike path
+            centerX -= laneWidthBike / 2;
+            generateStraightIntros(bikeTegelijk, centerX, stopLineBikes);
+            finalX = width / 2 - centerMedian / 2 - laneWidthCar * 3.5f;
+            // For finalY, let's just rotate centerX 90 degreees around center
+            float xTemp = centerX - width / 2;
+            float yTemp = stopLineBikes - height / 2;
+            finalY = round(yTemp * cos(-PI / 2) + xTemp * sin(-PI / 2) + height / 2);
+            n = 48;
+            for (int i = 0; i <= n; i++) {
+                float theta = map(i, 0, n, 0, PI / 2);
+                float x = finalX + (centerX - finalX) * cos(theta);
+                float y = stopLineBikes - (stopLineBikes - finalY) * sin(theta);
+                bikeTegelijk.addIntersectionNode(x, y);
+            }
+            generateStraightExits(bikeTegelijk, finalX, finalY, 0, finalY);
+        }
 
         // Rotate
         for (Movement movement : movementsTemp) {
+            if (!tegelijkGroen && movement.type == MovementType.BIKE_TEGELIJK)
+                continue;
             movement.rotatePath(rotation);
         }
 
@@ -205,6 +245,8 @@ class Sketch extends Applet {
         movementsCars.add(carStraight2);
         movementsCars.add(carRight);
         movementsBikes.add(bikeStraight);
+        if (tegelijkGroen)
+            movementsBikes.add(bikeTegelijk);
     }
 
     void generateStraightIntros(Movement movement, float x, float finalY) {
@@ -256,28 +298,62 @@ class Sketch extends Applet {
                 movement.draw();
         }
 
+        // Draw traffic lights at end so they are on top
+        for (Movement movement : movements) {
+            movement.drawTrafficLight();
+        }
+
         for (int i = traffic.size() - 1; i >= 0; i--) {
             Person person = traffic.get(i);
             if (person.update()) {
                 person.movement.removeTraffic(person);
                 traffic.remove(i);
+
+                if (person.movement.type == MovementType.CAR_STRAIGHT || person.movement.type == MovementType.CAR_RIGHT
+                        || person.movement.type == MovementType.CAR_LEFT) {
+                    timeWaitingCars.add(person.timeWaiting);
+                } else if (person.movement.type == MovementType.BIKE_STRAIGHT
+                        || person.movement.type == MovementType.BIKE_TEGELIJK) {
+                    timeWaitingBikes.add(person.timeWaiting);
+                }
+
                 continue;
             }
             person.draw();
         }
 
-        for (int i = 0; i < movements.size(); i++) {
-            fill(255);
-            textSize(30);
-            textAlign(CENTER);
-            text(i, PVector.add(movements.get(i).pathIntro.get(0),
-                    PVector.sub(PVector.center(),
-                            movements.get(i).pathIntro.get(0)).setMag(30)));
-        }
+        // for (int i = 0; i < movements.size(); i++) {
+        // fill(255);
+        // textSize(30);
+        // textAlign(CENTER);
+        // text(i, PVector.add(movements.get(i).pathIntro.get(0),
+        // PVector.sub(PVector.center(),
+        // movements.get(i).pathIntro.get(0)).setMag(30)));
+        // }
 
         textSize(50);
+        fill(255);
         textAlign(LEFT);
-        text("Phase: " + (IntersectionManager.currentPhaseIndex + 1), 10, 50);
+        text("Phase: " + (IntersectionManager.currentPhaseIndex + 1), 10, 30);
+
+        if (timeWaitingCars.size() > 0) {
+            int timeWaitingCarsSum = 0;
+            for (int i = 0; i < timeWaitingCars.size(); i++) {
+                timeWaitingCarsSum += timeWaitingCars.get(i);
+            }
+            textSize(30);
+            text("Cars: " + round((float) timeWaitingCarsSum / (float) timeWaitingCars.size() / 60.0, 1) + " s", 10,
+                    100);
+        }
+        if (timeWaitingBikes.size() > 0) {
+            int timeWaitingBikesSum = 0;
+            for (int i = 0; i < timeWaitingBikes.size(); i++) {
+                timeWaitingBikesSum += timeWaitingBikes.get(i);
+            }
+            textSize(30);
+            text("Bikes: " + round((float) timeWaitingBikesSum / (float) timeWaitingBikes.size() / 60.0, 1) + " s", 10,
+                    140);
+        }
     }
 
     void drawIntersectionMarkings() {
@@ -318,15 +394,14 @@ class Sketch extends Applet {
     public void createPerson() {
         Movement movement = movements.get(getWeightedRandomMovement());
         Person person = null;
-        // if (movement.type == MovementType.BIKE_STRAIGHT) {
-        // person = new Person(movement, speedBike, accelerationBike);
-        // } else {
-        // person = new Person(movement, speedCar, accelerationCar);
-        // }
         float speed = speedCar;
         float acceleration = accelerationCar;
         switch (movement.type) {
             case BIKE_STRAIGHT:
+                speed = speedBike;
+                acceleration = accelerationBike;
+                break;
+            case BIKE_TEGELIJK:
                 speed = speedBike;
                 acceleration = accelerationBike;
                 break;
@@ -350,24 +425,28 @@ class Sketch extends Applet {
     }
 
     public int getWeightedRandomMovement() {
-        int[][] rows = {
-                { 1, 2, 6, 7 },
-                { 0, 3, 4, 5, 8, 9 },
-                { 11, 12, 16, 17 },
-                { 15, 18, 19, 10, 13, 14 }
-        };
+        if (!tegelijkGroen) {
+            int[][] rows = {
+                    { 1, 2, 6, 7 },
+                    { 0, 3, 4, 5, 8, 9 },
+                    { 11, 12, 16, 17 },
+                    { 15, 18, 19, 10, 13, 14 }
+            };
 
-        float r = random(1);
-        // weights: row0 most, row3 least
-        float[] weights = { 0.35f, 0.25f, 0.22f, 0.18f };
-        float sum = 0;
-        for (int i = 0; i < rows.length; i++) {
-            sum += weights[i];
-            if (r < sum) {
-                return rows[i][(int) random(rows[i].length)];
+            float r = random(1);
+            // weights: row0 most, row3 least
+            float[] weights = { 0.35f, 0.25f, 0.22f, 0.18f };
+            float sum = 0;
+            for (int i = 0; i < rows.length; i++) {
+                sum += weights[i];
+                if (r < sum) {
+                    return rows[i][(int) random(rows[i].length)];
+                }
             }
+            return -1; // should not hit
+        } else {
+            return (int) random(movements.size());
         }
-        return -1; // should not hit
     }
 
 }

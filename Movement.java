@@ -29,6 +29,8 @@ class Movement extends PComponent implements EventIgnorer {
     HashMap<Movement, Integer> clearanceTimes;
 
     int sensorIndex;
+    int timeUntilGreenCounter = -1;
+    int timeUntilGreenCounterMax = -1;
 
     ArrayList<Person> traffic;
 
@@ -96,7 +98,7 @@ class Movement extends PComponent implements EventIgnorer {
                     throw new RuntimeException(
                             "It takes longer than the green time to get to the intersection, thus failing this calculation");
             }
-            sensorIndex += 2; // We'll increment 2 to be a little closer
+            sensorIndex += 1;
         }
 
         pathIntersection.add(new PVector(x, y));
@@ -203,6 +205,10 @@ class Movement extends PComponent implements EventIgnorer {
         for (Movement movement : movements) {
             if (movement == this)
                 continue;
+            // For tegelijk groen bikes, ignore the conflicting bike movements
+            if (type == MovementType.BIKE_TEGELIJK && type == movement.type)
+                continue;
+
             calculateClearanceTime(movement, threshold);
         }
     }
@@ -234,6 +240,7 @@ class Movement extends PComponent implements EventIgnorer {
             // If I'm in the ending phase and I'm still green, just keep being green
             if (outboundPhase.movements.contains(this) && signal == Signal.GREEN) {
                 // 0 clearance time
+                return;
             } else {
                 for (Movement movement : movements) {
                     if (!movement.changingRed || !clearanceTimes.containsKey(movement))
@@ -252,6 +259,10 @@ class Movement extends PComponent implements EventIgnorer {
      * This assumes we have passed the minimum green time.
      */
     public void end() {
+        if (signal == Signal.GREEN && frameCount < greenStartTime + greenTimeDefault) {
+            signalTimeline.put(greenStartTime + greenTimeDefault, Signal.YELLOW);
+            return;
+        }
         if (!changingRed && signal != Signal.RED) {
             signal = Signal.YELLOW;
             redStartTime = frameCount + yellowTime;
@@ -262,6 +273,18 @@ class Movement extends PComponent implements EventIgnorer {
     }
 
     public void update() {
+        int timeUntilGreen = estimatedTimeUntilGreen();
+        if (timeUntilGreen == -1 || timeUntilGreenCounter == -1) {
+            timeUntilGreenCounter = timeUntilGreen;
+            if (timeUntilGreenCounter != -1)
+                timeUntilGreenCounterMax = timeUntilGreen;
+        } else {
+            if (timeUntilGreen > timeUntilGreenCounter)
+                timeUntilGreenCounter = min(timeUntilGreenCounter + 8, timeUntilGreen);
+            else if (timeUntilGreen < timeUntilGreenCounter)
+                timeUntilGreenCounter = max(timeUntilGreenCounter - 8, timeUntilGreen);
+        }
+
         for (Integer time : signalTimeline.keySet()) {
             if (frameCount >= time) {
                 Signal signal = signalTimeline.get(time);
@@ -292,6 +315,10 @@ class Movement extends PComponent implements EventIgnorer {
             end();
         }
         if (signal == Signal.RED && waitingTraffic()) {
+            // If tegelijk groen, don't allow bike splicing
+            if (Sketch.tegelijkGroen && type == MovementType.BIKE_TEGELIJK || type == MovementType.BIKE_STRAIGHT) {
+                return;
+            }
             tryChangingToGreen();
         }
     }
@@ -436,7 +463,6 @@ class Movement extends PComponent implements EventIgnorer {
             drawPath();
         }
 
-        drawTrafficLight(pathIntersection.get(0));
         drawSensors();
 
         // fill(255, 0, 0, 50);
@@ -490,7 +516,7 @@ class Movement extends PComponent implements EventIgnorer {
         endShape();
     }
 
-    public void drawTrafficLight(PVector center) {
+    public void drawTrafficLight() {
         // float dir = PVector.angleBetween(PVector.sub(pathIntro.get(1),
         // pathIntro.get(0)), new PVector(0, 1));
         PVector diff = PVector.sub(pathIntro.get(1), pathIntro.get(0));
@@ -508,7 +534,7 @@ class Movement extends PComponent implements EventIgnorer {
         float signalRadius = laneWidth / 2.2f;
 
         push();
-        translate(center);
+        translate(pathIntersection.get(0));
         rotate(dir);
         stroke(200);
         strokeWeight(2);
@@ -525,8 +551,8 @@ class Movement extends PComponent implements EventIgnorer {
                 signalRadius);
 
         // Draw estimated time until green
-        int timeUntilGreen = estimatedTimeUntilGreen();
-        int maxTimeUntilGreen = IntersectionManager.phases.get(0).maximumTypicalGreenTime * 3 + yellowTime + exitTime;
+        float maxTimeUntilGreen = IntersectionManager.phases.get(0).maximumTypicalGreenTime * 3.5f + yellowTime
+                + exitTime;
         noStroke();
         rectMode(CORNER);
 
@@ -537,12 +563,12 @@ class Movement extends PComponent implements EventIgnorer {
         fill(0);
         rect(-signalRadius - w, startY, w, signalRadius * 4);
 
-        if (timeUntilGreen != -1) {
+        if (timeUntilGreenCounter != -1) {
             fill(224, 199, 72);
             int n = 30;
             for (int i = 0; i <= n; i++) {
                 float y = map(i, n, 0, startY + w / 2, startY + signalRadius * 4 - w / 2);
-                if ((float) i / n > (float) timeUntilGreen / maxTimeUntilGreen)
+                if ((float) i / n > (float) timeUntilGreenCounter / maxTimeUntilGreen)
                     break;
                 circle(-signalRadius - w / 2, y, w / 2);
             }
@@ -582,10 +608,6 @@ class Movement extends PComponent implements EventIgnorer {
             }
         }
 
-        // If we are the current phase but no traffic, then -1
-        if (phase != null && phase.activePhase)
-            return -1;
-
         // Otherwise, we just wait figure out the max waiting time until our phase
         int index = IntersectionManager.currentPhaseIndex;
         int waitedPhases = 0;
@@ -597,7 +619,7 @@ class Movement extends PComponent implements EventIgnorer {
             waitedPhases++;
         }
         // Return: time left of current phase + waitedPhases * max time of phase
-        Phase currentPhase = IntersectionManager.phases.get(index);
+        Phase currentPhase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
         int currentPhaseTime = max(currentPhase.maximumTypicalGreenTime - (frameCount - currentPhase.phaseStartTime),
                 0);
         int waitedPhasesTime = waitedPhases * currentPhase.maximumTypicalGreenTime;
