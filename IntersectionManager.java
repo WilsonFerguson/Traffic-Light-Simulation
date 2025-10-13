@@ -20,7 +20,7 @@ class IntersectionManager extends PComponent implements EventIgnorer {
     }
 
     public static void nextPhase() {
-        int next = (currentPhaseIndex + 1) % phases.size();
+        int next = getProbabilisticNextPhase();
 
         // End all spliced in movements
         for (Movement movement : movements) {
@@ -37,6 +37,30 @@ class IntersectionManager extends PComponent implements EventIgnorer {
         phases.get(next).begin(phases.get(currentPhaseIndex));
 
         currentPhaseIndex = next;
+    }
+
+    public static int getProbabilisticNextPhase() {
+        int next = (currentPhaseIndex + 1) % phases.size();
+
+        // If all of the movements in the new phase have no traffic, go to the next one.
+        // If this is true for all phases, then just advance one
+        while (true) {
+            // The next phase has traffic, so return it
+            for (Movement movement : phases.get(next).movements) {
+                if (movement.waitingTraffic()) {
+                    return next;
+                }
+            }
+
+            // Advance the phase
+            next = (next + 1) % phases.size();
+            if (next == currentPhaseIndex) {
+                next = (next + 1) % phases.size();
+                break;
+            }
+        }
+
+        return next;
     }
 
     public static void update() {

@@ -10,6 +10,7 @@ class Person extends PComponent implements EventIgnorer {
     float speed;
     float maxSpeed;
     float acceleration;
+    float angle;
     boolean move;
 
     boolean start = true;
@@ -70,14 +71,21 @@ class Person extends PComponent implements EventIgnorer {
         }
 
         speed = min(speed + acceleration, maxSpeed);
-        dir = PVector.sub(movement.path.get(currentIndex + 1), pos);
-        if (dir.mag() > speed) {
-            dir.setMag(speed);
+
+        // dirTemp is used for velocity as well as smoothly setting the drawing "dir"
+        PVector dirTemp = PVector.sub(movement.path.get(currentIndex + 1), pos);
+        if (dir == null)
+            dir = dirTemp;
+        else
+            dir.lerp(dirTemp, 0.1f);
+
+        if (dirTemp.mag() > speed) {
+            dirTemp.setMag(speed);
         } else {
             // After this move, we will arrive at the node
             move = false;
         }
-        pos.add(dir);
+        pos.add(dirTemp);
 
         return false;
     }
@@ -94,7 +102,9 @@ class Person extends PComponent implements EventIgnorer {
         push();
         translate(pos);
         rotate(dir.heading());
-        rect(0, 0, movement.laneWidth / 1.4, movement.laneWidth / 3);
+        float w = movement.laneWidth / 1.4f;
+        float h = movement.laneWidth / 3;
+        rect(-w, 0, w, h);
         pop();
     }
 

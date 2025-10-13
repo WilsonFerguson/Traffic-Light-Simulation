@@ -36,6 +36,9 @@ class Movement extends PComponent implements EventIgnorer {
 
     Signal signal;
     color pathColor;
+    color drawColor;
+    color prevTargetColor = null;
+    float pathHighlightAlpha = 0;
 
     Phase phase = null;
     boolean changingGreen = false;
@@ -73,6 +76,7 @@ class Movement extends PComponent implements EventIgnorer {
 
         signal = Signal.RED;
         this.pathColor = pathColor;
+        drawColor = pathColor;
     }
 
     public void addIntroNode(double x, double y) {
@@ -94,9 +98,10 @@ class Movement extends PComponent implements EventIgnorer {
             while ((dist / speed) < greenTimeDefault) {
                 dist += pathIntro.get(sensorIndex).dist(pathIntro.get(sensorIndex - 1));
                 sensorIndex--;
-                if (sensorIndex == 0)
-                    throw new RuntimeException(
-                            "It takes longer than the green time to get to the intersection, thus failing this calculation");
+                if (sensorIndex == 0) {
+                    println("WARNING: It takes longer than the green time to get to the intersection! Using the first node by default.");
+                    break;
+                }
             }
             sensorIndex += 1;
         }
@@ -223,7 +228,7 @@ class Movement extends PComponent implements EventIgnorer {
 
         // As long as the person isn't at the light, they can move forward if the next
         // node is clear
-        if (person.currentIndex != pathIntro.size()) {
+        if (person.currentIndex != pathIntro.size() - 1) {
             return true;
         } else {
             return signal != Signal.RED;
@@ -243,10 +248,21 @@ class Movement extends PComponent implements EventIgnorer {
                 return;
             } else {
                 for (Movement movement : movements) {
-                    if (!movement.changingRed || !clearanceTimes.containsKey(movement))
+                    if (!clearanceTimes.containsKey(movement))
                         continue;
-
-                    changeTime = max(changeTime, movement.redStartTime + clearanceTimes.get(movement));
+                    if (movement.changingRed) {
+                        changeTime = max(changeTime, movement.redStartTime + clearanceTimes.get(movement));
+                    } else {
+                        // The conflicting movement is green so we need to change them red (if they
+                        // aren't already going to)
+                        if (movement.signalTimeline.size() == 0) {
+                            movement.signalTimeline.put(movement.greenStartTime + movement.greenTimeDefault,
+                                    Signal.YELLOW);
+                        }
+                        // Either way, we can manually calculate the redStartTime
+                        int redStart = movement.greenStartTime + movement.greenTimeDefault + movement.yellowTime;
+                        changeTime = max(changeTime, redStart + clearanceTimes.get(movement));
+                    }
                 }
             }
         }
@@ -255,9 +271,6 @@ class Movement extends PComponent implements EventIgnorer {
         changingGreen = true;
     }
 
-    /**
-     * This assumes we have passed the minimum green time.
-     */
     public void end() {
         if (signal == Signal.GREEN && frameCount < greenStartTime + greenTimeDefault) {
             signalTimeline.put(greenStartTime + greenTimeDefault, Signal.YELLOW);
@@ -426,10 +439,15 @@ class Movement extends PComponent implements EventIgnorer {
 
             // If we could do a minimum green time before the phase ends or the next phase
             // includes me, let's do it
+            // NOTE: The next phase is only probabilistic so we can't be sure that we will
+            // be in the next phase. Specifically, if we go now and thus no longer have
+            // traffic, then the next phase may skip us. This is okay as it just means the
+            // phase after will have to wait for us but it's still overall less waiting for
+            // them
             Phase phase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
             boolean enoughTime = changeTime + greenTimeDefault < phase.phaseStartTime + phase.maximumTypicalGreenTime;
             boolean inNextPhase = IntersectionManager.phases
-                    .get((IntersectionManager.currentPhaseIndex + 1) % IntersectionManager.phases.size()).movements
+                    .get(IntersectionManager.getProbabilisticNextPhase()).movements
                     .contains(this);
             if (enoughTime || inNextPhase) {
                 signalTimeline.put(changeTime, Signal.GREEN);
@@ -441,29 +459,41 @@ class Movement extends PComponent implements EventIgnorer {
 
     public void draw() {
         noStroke();
-        fill(pathColor);
+        color targetColor = null;
         if (Settings.HIGHLIGHT_SIGNALS) {
             switch (signal) {
                 case GREEN:
-                    fill(Settings.GREEN);
+                    targetColor = Settings.GREEN;
                     break;
                 case YELLOW:
-                    fill(Settings.YELLOW);
+                    targetColor = Settings.YELLOW;
                     break;
                 case RED:
+                    targetColor = pathColor;
                     break;
             }
         }
+        if (targetColor == prevTargetColor)
+            drawColor = lerpColor(drawColor, targetColor, 0.25);
+        fill(drawColor);
+        prevTargetColor = targetColor;
         drawPath();
 
         // Draw the normaly realized paths
-        if (phase != null && phase.activePhase) {
+        if (phase != null && phase.activePhase)
+            pathHighlightAlpha = min(pathHighlightAlpha + 4, 34);
+        else
+            pathHighlightAlpha = max(pathHighlightAlpha - 4, 0);
+        // By making it > 4 and not > 0 it requires 2 frames in a row to be active phase
+        // so you don't get flickering at the start. We then - 4 to make the alpha start
+        // at 0 when drawing
+        if (pathHighlightAlpha > 4) {
             noStroke();
-            fill(255, 30);
+            fill(255, pathHighlightAlpha - 4);
             drawPath();
         }
 
-        drawSensors();
+        drawSensor();
 
         // fill(255, 0, 0, 50);
         // noStroke();
@@ -575,16 +605,17 @@ class Movement extends PComponent implements EventIgnorer {
 
         // Stopline
         noStroke();
-        fill(160);
+        fill(220, 150);
         rectMode(CENTER);
         PVector offset = PVector.sub(pathIntro.get(1), pathIntro.get(0)).normalize().rotate(-PI / 2)
-                .mult(laneWidth);
-        if (offset.x == 0)
+                .mult(laneWidth).abs();
+        if (offset.x < 0.01)
             offset.x = 3;
         else
             offset.y = 3;
 
         translate(PVector.fromAngle(dir).rotate(PI / 2).mult(-h * 1.3));
+        rotate(dir);
         rect(PVector.zero(), offset);
 
         pop();
@@ -644,12 +675,15 @@ class Movement extends PComponent implements EventIgnorer {
         return currentPhaseTime + waitedPhasesTime + yellowTime + exitTime;
     }
 
-    public void drawSensors() {
+    public void drawSensor() {
         noFill();
         stroke(5, 100);
         strokeWeight(2);
         rectMode(CENTER);
-        rect(pathIntro.get(sensorIndex), laneWidth * 0.8, laneWidth * 0.5);
+        PVector dir = PVector.sub(pathIntro.get(1), pathIntro.get(0)).normalize();
+        PVector dimensions = new PVector(dir.x == 0 ? laneWidth * 0.8f : laneWidth * 0.45f,
+                dir.y == 0 ? laneWidth * 0.8f : laneWidth * 0.5f);
+        rect(pathIntro.get(sensorIndex), dimensions);
     }
 
     public void printPath() {

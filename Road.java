@@ -12,8 +12,7 @@ public class Road extends PComponent implements EventIgnorer {
      */
     float[] movementStartPointsX;
     PVector[] movementEndpoints;
-    Movement[] movements;
-    HashMap<MovementType, Movement[]> movementsByType;
+    HashMap<MovementType, ArrayList<Movement>> movements;
     /**
      * The first index in the movements array where the given movement starts
      */
@@ -43,7 +42,11 @@ public class Road extends PComponent implements EventIgnorer {
         movementTypes = types;
         movementStartPointsX = new float[types.length];
         movementEndpoints = new PVector[types.length];
-        movements = new Movement[types.length];
+        movements = new HashMap<>();
+
+        for (MovementType type : types) {
+            movements.put(type, new ArrayList<>());
+        }
 
         for (int i = 0; i < types.length; i++) {
             if (types[i] == MovementType.CAR_STRAIGHT && indexStraight == -1)
@@ -66,7 +69,7 @@ public class Road extends PComponent implements EventIgnorer {
 
     public void createStartPoints() {
         MovementType previous = null;
-        for (int i = 0; i < movements.length; i++) {
+        for (int i = 0; i < movementTypes.length; i++) {
             MovementType type = movementTypes[i];
 
             // Add padding between cars and bike path
@@ -91,24 +94,24 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     public void createEndPoints() {
-        for (int i = 0; i < movements.length; i++) {
+        for (int i = 0; i < movementTypes.length; i++) {
             MovementType type = movementTypes[i];
 
             switch (type) {
                 case CAR_LEFT:
                     float finalX = width / 2 - abs(width / 2
-                            - (straight.movementStartPointsX[straight.movements.length - 1] + Sketch.laneWidthCar));
+                            - (straight.movementStartPointsX[straight.movementTypes.length - 1] + Sketch.laneWidthCar));
                     float finalY = height / 2 - abs((width / 2 - right.movementStartPointsX[right.indexStraight]));
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
                 case CAR_STRAIGHT:
                     finalX = this.movementStartPointsX[i];
                     finalY = height / 2 - abs((width / 2
-                            - (right.movementStartPointsX[right.movements.length - 1] + Sketch.laneWidthCar)));
+                            - (right.movementStartPointsX[right.movementTypes.length - 1] + Sketch.laneWidthCar)));
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
                 case CAR_RIGHT:
-                    finalX = this.movementStartPointsX[this.movements.length - 1] + Sketch.laneWidthCar;
+                    finalX = this.movementStartPointsX[this.movementTypes.length - 1] + Sketch.laneWidthCar;
                     finalY = height / 2 + abs((width / 2 - left.movementStartPointsX[left.indexRight - 1]));
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
@@ -133,10 +136,10 @@ public class Road extends PComponent implements EventIgnorer {
     public void createMovements(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsCars,
             ArrayList<Movement> movementsBikes) {
         float stopLineCars = height / 2
-                + abs((width / 2 - (left.movementStartPointsX[left.movements.length - 1] + Sketch.laneWidthBike)));
+                + abs((width / 2 - (left.movementStartPointsX[left.movementTypes.length - 1] + Sketch.laneWidthBike)));
         float stopLineBikes = height / 2
                 + abs((width / 2 - (left.movementStartPointsX[left.indexRight - 1] + Sketch.laneWidthCar)));
-        for (int i = 0; i < movements.length; i++) {
+        for (int i = 0; i < movementTypes.length; i++) {
             switch (movementTypes[i]) {
                 case CAR_LEFT:
                     createCarLeft(movementsAll, movementsCars, i, stopLineCars);
@@ -159,12 +162,14 @@ public class Road extends PComponent implements EventIgnorer {
             }
         }
 
-        for (Movement movement : movements) {
-            if (!Sketch.tegelijkGroen && movement.type == MovementType.BIKE_TEGELIJK)
-                continue;
+        for (ArrayList<Movement> movs : movements.values()) {
+            for (Movement movement : movs) {
+                if (!Sketch.tegelijkGroen && movement.type == MovementType.BIKE_TEGELIJK)
+                    continue;
 
-            movement.rotatePath(rotationAngle);
-            movementsAll.add(movement);
+                movement.rotatePath(rotationAngle);
+                movementsAll.add(movement);
+            }
         }
     }
 
@@ -174,7 +179,7 @@ public class Road extends PComponent implements EventIgnorer {
                 Sketch.speedCarTurn, Sketch.laneWidthCar, Sketch.accelerationCar, Settings.PATH_CAR);
 
         float x = movementStartPointsX[index];
-        generateStraightIntros(movement, x, stopLine);
+        generateStraightIntros(movement, 15, x, stopLine);
 
         PVector start = new PVector(x, stopLine);
         PVector end = movementEndpoints[index];
@@ -190,8 +195,8 @@ public class Road extends PComponent implements EventIgnorer {
             movement.addIntersectionNode(xTemp, yTemp);
         }
 
-        generateStraightExits(movement, end.x, end.y, 0, end.y);
-        movements[index] = movement;
+        generateStraightExits(movement, 40, end.x, end.y, 0, end.y);
+        movements.get(MovementType.CAR_LEFT).add(movement);
         movementsToAdd.add(movement);
     }
 
@@ -202,14 +207,14 @@ public class Road extends PComponent implements EventIgnorer {
 
         float x = movementStartPointsX[index];
 
-        generateStraightIntros(movement, x, stopLine);
+        generateStraightIntros(movement, 15, x, stopLine);
         int n = 40;
         for (int i = 0; i <= n; i++) {
             movement.addIntersectionNode(x, map(i, 0, n, stopLine, movementEndpoints[index].y));
         }
-        generateStraightExits(movement, x, movementEndpoints[index].y, x, 0);
+        generateStraightExits(movement, 40, x, movementEndpoints[index].y, x, 0);
 
-        movements[index] = movement;
+        movements.get(MovementType.CAR_STRAIGHT).add(movement);
         movementsToAdd.add(movement);
     }
 
@@ -219,7 +224,7 @@ public class Road extends PComponent implements EventIgnorer {
                 Sketch.speedCarTurn, Sketch.laneWidthCar, Sketch.accelerationCar, Settings.PATH_CAR);
 
         float x = movementStartPointsX[index];
-        generateStraightIntros(movement, x, stopLine);
+        generateStraightIntros(movement, 15, x, stopLine);
 
         PVector start = new PVector(x, stopLine);
         PVector end = movementEndpoints[index];
@@ -235,8 +240,8 @@ public class Road extends PComponent implements EventIgnorer {
             movement.addIntersectionNode(xTemp, yTemp);
         }
 
-        generateStraightExits(movement, end.x, end.y, width, end.y);
-        movements[index] = movement;
+        generateStraightExits(movement, 40, end.x, end.y, width, end.y);
+        movements.get(MovementType.CAR_RIGHT).add(movement);
         movementsToAdd.add(movement);
     }
 
@@ -247,14 +252,14 @@ public class Road extends PComponent implements EventIgnorer {
 
         float x = movementStartPointsX[index];
 
-        generateStraightIntros(movement, x, stopLine);
-        int n = 40;
+        generateStraightIntros(movement, 40, x, stopLine);
+        int n = 50;
         for (int i = 0; i <= n; i++) {
             movement.addIntersectionNode(x, map(i, 0, n, stopLine, movementEndpoints[index].y));
         }
-        generateStraightExits(movement, x, movementEndpoints[index].y, x, 0);
+        generateStraightExits(movement, 50, x, movementEndpoints[index].y, x, 0);
 
-        movements[index] = movement;
+        movements.get(MovementType.BIKE_STRAIGHT).add(movement);
         movementsToAdd.add(movement);
     }
 
@@ -264,7 +269,7 @@ public class Road extends PComponent implements EventIgnorer {
                 Sketch.speedBike, Sketch.laneWidthBike, Sketch.accelerationBike, Settings.PATH_BIKE);
 
         float x = movementStartPointsX[index];
-        generateStraightIntros(movement, x, stopLine);
+        generateStraightIntros(movement, 30, x, stopLine);
 
         PVector start = new PVector(x, stopLine);
         PVector end = movementEndpoints[index];
@@ -279,8 +284,8 @@ public class Road extends PComponent implements EventIgnorer {
             movement.addIntersectionNode(xTemp, yTemp);
         }
 
-        generateStraightExits(movement, end.x, end.y, 0, end.y);
-        movements[index] = movement;
+        generateStraightExits(movement, 40, end.x, end.y, 0, end.y);
+        movements.get(MovementType.BIKE_TEGELIJK).add(movement);
         movementsToAdd.add(movement);
     }
 
@@ -288,15 +293,14 @@ public class Road extends PComponent implements EventIgnorer {
         // TODO: create pedestrian
     }
 
-    private void generateStraightIntros(Movement movement, float x, float finalY) {
-        int n = 20;
-        for (int i = 0; i <= n; i++) {
+    private void generateStraightIntros(Movement movement, int n, float x, float finalY) {
+        for (int i = 0; i < n; i++) {
             movement.addIntroNode(x, map(i, 0, n, height, finalY));
         }
     }
 
-    private void generateStraightExits(Movement movement, float startX, float startY, float finalX, float finalY) {
-        int n = 40;
+    private void generateStraightExits(Movement movement, int n, float startX, float startY, float finalX,
+            float finalY) {
         for (int i = 0; i <= n; i++) {
             movement.addExitNode(map(i, 0, n, startX, finalX), map(i, 0, n, startY, finalY));
         }

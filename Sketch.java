@@ -29,6 +29,14 @@ class Sketch extends Applet {
     public static int greenTime = 4 * 60;
     int maximumTypicalGreenTime = 13 * 60;
 
+    double personCreationChance = 0.06; // Chance for person to be spawned each frame
+    double personCarChance = 0.8; // Chance for person to be a car
+    double personRoads02Chance = 0.6; // Chance for person to be on roads 0 or 2 (main roads)
+
+    // Defaults:
+    // Medium traffic: 0.06, 0.7, 0.6
+    // Light traffic: 0.01, 0.92, 0.6
+
     /**
      * If true, then bikes will only use tegelijk groen. If false, they will never
      * use it.
@@ -38,6 +46,16 @@ class Sketch extends Applet {
     public static int laneWidthCar = 3 * unitsPerMeter;
     public static int laneWidthBike = 2 * unitsPerMeter;
     public static float centerMedian;
+
+    private class PhaseDirection {
+        int roadIndex;
+        MovementType[] types;
+
+        public PhaseDirection(int roadIndex, MovementType... movementTypes) {
+            this.roadIndex = roadIndex;
+            this.types = movementTypes;
+        }
+    }
 
     public void setup() {
         size(1200, 1200);
@@ -56,20 +74,17 @@ class Sketch extends Applet {
         timeWaitingCars = new ArrayList<Integer>();
         timeWaitingBikes = new ArrayList<Integer>();
 
-        // // North
-        // createMovementDirection(0);
-        // // South
-        // createMovementDirection(PI);
-        // // East
-        // createMovementDirection(PI / 2);
-        // // West
-        // createMovementDirection(-PI / 2);
+        MovementType CL = MovementType.CAR_LEFT;
+        MovementType CS = MovementType.CAR_STRAIGHT;
+        MovementType CR = MovementType.CAR_RIGHT;
+        MovementType BS = MovementType.BIKE_STRAIGHT;
+        MovementType BT = MovementType.BIKE_TEGELIJK;
 
         roads = new Road[4];
-        roads[0] = new Road(0).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
-        roads[1] = new Road(-PI / 2).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
-        roads[2] = new Road(PI).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
-        roads[3] = new Road(PI / 2).addMovements(MovementType.CAR_LEFT, MovementType.CAR_STRAIGHT, MovementType.CAR_STRAIGHT, MovementType.CAR_RIGHT, MovementType.BIKE_STRAIGHT);
+        roads[0] = new Road(0).addMovements(CL, CS, CS, CR, BS);
+        roads[1] = new Road(-PI / 2).addMovements(CL, CS, CS, CR, BS);
+        roads[2] = new Road(PI).addMovements(CL, CS, CS, CR, BS);
+        roads[3] = new Road(PI / 2).addMovements(CL, CS, CS, CR, BS);
 
         for (int i = 0; i < 4; i++) {
             roads[i].getOtherRoads(roads, i);
@@ -90,202 +105,57 @@ class Sketch extends Applet {
 
         IntersectionManager.movements = movements;
         if (!tegelijkGroen) {
-            Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 4, 11, 12, 14);
-            Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 10, 3, 8, 13, 18);
-            Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 6, 7, 9, 16, 17, 19);
-            Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 5, 15, 3, 8, 13, 18);
+            Phase phase1 = createPhase(new PhaseDirection(0, CS, BS), new PhaseDirection(2, CS, BS));
+            Phase phase2 = createPhase(new PhaseDirection(0, CL, CR), new PhaseDirection(2, CL, CR),
+                    new PhaseDirection(1, CR), new PhaseDirection(3, CR));
+            Phase phase3 = createPhase(new PhaseDirection(1, CS, BS), new PhaseDirection(3, CS, BS));
+            Phase phase4 = createPhase(new PhaseDirection(1, CL, CR), new PhaseDirection(3, CL, CR),
+                    new PhaseDirection(0, CR), new PhaseDirection(2, CR));
             IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
         } else {
-            // Phase phase1 = new Phase(maximumTypicalGreenTime, movements, 1, 2, 3, 7, 8, 9);
-            // Phase phase2 = new Phase(maximumTypicalGreenTime, movements, 0, 6, 3, 21, 9, 15);
-            // Phase phase3 = new Phase(maximumTypicalGreenTime, movements, 13, 14, 19, 20, 15, 21);
-            // Phase phase4 = new Phase(maximumTypicalGreenTime, movements, 12, 18, 3, 21, 9, 15);
-            // Phase phase5 = new Phase(maximumTypicalGreenTime, movements, 5, 4, 22, 23, 10, 11, 16, 17);
-            // IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
-            throw new RuntimeException("Phases not implemented with the new numbers");
+            Phase phase1 = createPhase(new PhaseDirection(0, CS, CR), new PhaseDirection(1, CR),
+                    new PhaseDirection(2, CS, CR), new PhaseDirection(3, CR));
+            Phase phase2 = createPhase(new PhaseDirection(0, CL, CR), new PhaseDirection(1, CR),
+                    new PhaseDirection(2, CL, CR), new PhaseDirection(3, CR));
+            Phase phase3 = createPhase(new PhaseDirection(0, CR), new PhaseDirection(1, CS, CR),
+                    new PhaseDirection(2, CR), new PhaseDirection(3, CS, CR));
+            Phase phase4 = createPhase(new PhaseDirection(0, CR), new PhaseDirection(1, CL, CR),
+                    new PhaseDirection(2, CR), new PhaseDirection(3, CL, CR));
+            Phase phase5 = createPhase(new PhaseDirection(0, BS, BT), new PhaseDirection(1, BS, BT),
+                    new PhaseDirection(2, BS, BT), new PhaseDirection(3, BS, BT));
+            IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
         }
 
         IntersectionManager.start();
     }
 
-    public void createMovementDirection(float rotation) {
-        Movement carLeft = new Movement(movements, MovementType.CAR_LEFT, greenTime, yellowCar, speedCarTurn,
-                laneWidthCar,
-                accelerationCar,
-                Settings.PATH_CAR);
-        Movement carStraight1 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCar,
-                speedCar,
-                laneWidthCar, accelerationCar,
-                Settings.PATH_CAR);
-        Movement carStraight2 = new Movement(movements, MovementType.CAR_STRAIGHT, greenTime, yellowCar,
-                speedCar,
-                laneWidthCar, accelerationCar,
-                Settings.PATH_CAR);
-        Movement carRight = new Movement(movements, MovementType.CAR_RIGHT, greenTime, yellowCar, speedCarTurn,
-                laneWidthCar,
-                accelerationCar,
-                Settings.PATH_CAR);
-        Movement bikeStraight = new Movement(movements, MovementType.BIKE_STRAIGHT, greenTime, yellowBike, speedBike,
-                laneWidthBike, accelerationBike,
-                Settings.PATH_BIKE);
-        Movement bikeTegelijk = new Movement(movements, MovementType.BIKE_TEGELIJK, greenTime, yellowBike, speedBike,
-                laneWidthBike, accelerationBike,
-                Settings.PATH_BIKE);
-        // TODO: peds
-
-        ArrayList<Movement> movementsTemp = new ArrayList<Movement>();
-        movementsTemp.add(carLeft);
-        movementsTemp.add(carStraight1);
-        movementsTemp.add(carStraight2);
-        movementsTemp.add(carRight);
-        movementsTemp.add(bikeStraight);
-        if (tegelijkGroen)
-            movementsTemp.add(bikeTegelijk);
-
-        float centerX = width / 2 + centerMedian / 2;
-        float stopLineCars = height / 2 + centerMedian / 2 + laneWidthCar * 6 + laneWidthBike;
-        float stopLineBikes = height / 2 + centerMedian / 2 + laneWidthCar * 3.5f;
-
-        // Left turn
-        generateStraightIntros(carLeft, centerX, stopLineCars);
-        carLeft.addIntersectionNode(centerX, stopLineCars);
-        float finalX = width / 2 - centerMedian / 2 - laneWidthCar * 3.5f;
-        float finalY = height / 2 - centerMedian / 2;
-        float startY = finalY + (centerX - finalX);
-        int n = 6;
-        for (int i = 1; i <= n; i++) {
-            carLeft.addIntersectionNode(centerX, map(i, 0, n + 1, stopLineCars, startY));
-        }
-        n = 40;
-        for (int i = 0; i <= n; i++) {
-            float angle = map(i, 0, n, 0, PI / 2);
-            float x = centerX - (cos(angle) - 1) * (finalX - centerX);
-            float y = startY + sin(angle) * (finalY - startY);
-            carLeft.addIntersectionNode(x, y);
-        }
-        float xInc = finalX;
-        n = 10;
-        for (int i = 1; i < n; i++) {
-            // xInc = finalX - laneWidthCar * 0.75f * i;
-            xInc = map(i, 0, n, finalX, finalX - laneWidthCar * 3.5);
-            carLeft.addIntersectionNode(xInc, finalY);
-        }
-        generateStraightExits(carLeft, xInc, finalY, 0, finalY);
-
-        centerX += laneWidthCar;
-
-        // Straights
-        generateStraightIntros(carStraight1, centerX, stopLineCars);
-        finalY = height / 2 - centerMedian / 2 - laneWidthCar * 6 - laneWidthBike;
-        n = 40;
-        for (int i = 0; i <= n; i++) {
-            carStraight1.addIntersectionNode(centerX, map(i, 0, n, stopLineCars, finalY));
-        }
-        generateStraightExits(carStraight1, centerX, finalY, centerX, 0);
-
-        centerX += laneWidthCar;
-
-        generateStraightIntros(carStraight2, centerX, stopLineCars);
-
-        for (int i = 0; i <= n; i++) {
-            carStraight2.addIntersectionNode(centerX, map(i, 0, n, stopLineCars, finalY));
-        }
-        generateStraightExits(carStraight2, centerX, finalY, centerX, 0);
-
-        centerX += laneWidthCar;
-
-        // Right turn
-        generateStraightIntros(carRight, centerX, stopLineCars);
-        finalX = centerX + laneWidthCar * 3;
-        finalY = stopLineBikes - laneWidthCar * 1.5f;
-        startY = finalY + (finalX - centerX);
-        n = 5;
-        for (int i = 0; i < n; i++) {
-            carRight.addIntersectionNode(centerX, map(i, 0, n, stopLineCars, startY));
-        }
-        n = 14;
-        for (int i = 0; i <= n; i++) {
-            float angle = map(i, 0, n, PI, PI / 2);
-            float x = centerX + (cos(angle) + 1) * laneWidthCar * 2;
-            float y = startY - sin(angle) * laneWidthCar * 3;
-            carRight.addIntersectionNode(x, y);
-        }
-        float xCurr = carRight.pathIntersection.get(carRight.pathIntersection.size() - 1).x;
-        n = 6;
-        for (int i = 1; i <= n; i++) {
-            // xInc = xCurr + laneWidthCar * 0.5f * i;
-            xInc = map(i, 0, n, xCurr, xCurr + laneWidthCar * 1.5);
-            carRight.addIntersectionNode(xInc, finalY);
-        }
-        generateStraightExits(carRight, xInc, finalY, width, finalY);
-
-        centerX += laneWidthCar * 2;
-
-        // Bikes straight
-        generateStraightIntros(bikeStraight, centerX, stopLineBikes);
-        n = 40;
-        finalY = height / 2 - centerMedian / 2 - laneWidthCar * 6 - laneWidthBike;
-        for (int i = 0; i <= n; i++) {
-            bikeStraight.addIntersectionNode(centerX, map(i, 0, n, stopLineBikes, finalY));
-        }
-        generateStraightExits(bikeStraight, centerX, finalY, centerX, 0);
-
-        // Bikes tegelijk (so left turn here)
-        if (tegelijkGroen) {
-            // Move the bikes slightly over so they queue up on the left side of the (now
-            // slightly wider) bike path
-            centerX -= laneWidthBike / 2;
-            generateStraightIntros(bikeTegelijk, centerX, stopLineBikes);
-            finalX = width / 2 - centerMedian / 2 - laneWidthCar * 3.5f;
-            // For finalY, let's just rotate centerX 90 degreees around center
-            float xTemp = centerX - width / 2;
-            float yTemp = stopLineBikes - height / 2;
-            finalY = round(yTemp * cos(-PI / 2) + xTemp * sin(-PI / 2) + height / 2);
-            n = 48;
-            for (int i = 0; i <= n; i++) {
-                float theta = map(i, 0, n, 0, PI / 2);
-                float x = finalX + (centerX - finalX) * cos(theta);
-                float y = stopLineBikes - (stopLineBikes - finalY) * sin(theta);
-                bikeTegelijk.addIntersectionNode(x, y);
+    private Phase createPhase(PhaseDirection... directions) {
+        ArrayList<Movement> activeMovements = new ArrayList<>();
+        for (PhaseDirection direction : directions) {
+            for (MovementType type : direction.types) {
+                for (Movement movement : roads[direction.roadIndex].movements.get(type)) {
+                    activeMovements.add(movement);
+                }
             }
-            generateStraightExits(bikeTegelijk, finalX, finalY, 0, finalY);
         }
 
-        // Rotate
-        for (Movement movement : movementsTemp) {
-            if (!tegelijkGroen && movement.type == MovementType.BIKE_TEGELIJK)
-                continue;
-            movement.rotatePath(rotation);
+        int[] indices = new int[activeMovements.size()];
+        int i = 0;
+        while (activeMovements.size() > 0) {
+            int index = movements.indexOf(activeMovements.get(0));
+            activeMovements.remove(0);
+            indices[i] = index;
+            i++;
         }
 
-        movements.addAll(movementsTemp);
-        movementsCars.add(carLeft);
-        movementsCars.add(carStraight1);
-        movementsCars.add(carStraight2);
-        movementsCars.add(carRight);
-        movementsBikes.add(bikeStraight);
-        if (tegelijkGroen)
-            movementsBikes.add(bikeTegelijk);
-    }
+        return new Phase(maximumTypicalGreenTime, movements, indices);
 
-    void generateStraightIntros(Movement movement, float x, float finalY) {
-        int n = 16;
-        for (int i = 0; i <= n; i++) {
-            movement.addIntroNode(x, map(i, 0, n, height, finalY));
-        }
-    }
-
-    void generateStraightExits(Movement movement, float startX, float startY, float finalX, float finalY) {
-        int n = 40;
-        for (int i = 0; i <= n; i++) {
-            movement.addExitNode(map(i, 0, n, startX, finalX), map(i, 0, n, startY, finalY));
-        }
     }
 
     public void draw() {
         background(27, 135, 11);
 
-        if (random(1) < 0.06)
+        if (random(1) < personCreationChance)
             createPerson();
 
         IntersectionManager.update();
@@ -380,8 +250,10 @@ class Sketch extends Applet {
         rectMode(CORNER);
 
         fill(Settings.ROAD_BACKGROUND);
-        PVector bottomRight = new PVector(roads[0].movementStartPointsX[roads[0].movements.length - 1], roads[3].movements[roads[3].movements.length - 1].path.get(0).y);
-        PVector topLeft = new PVector(roads[2].movements[roads[2].movements.length - 1].path.get(0).x, roads[1].movements[roads[1].movements.length - 1].path.get(0).y);
+        PVector topLeft = new PVector(roads[2].movements.get(MovementType.BIKE_STRAIGHT).get(0).path.get(0).x,
+                roads[1].movements.get(MovementType.BIKE_STRAIGHT).get(0).path.get(0).y);
+        PVector bottomRight = new PVector(roads[0].movements.get(MovementType.BIKE_STRAIGHT).get(0).path.get(0).x,
+                roads[3].movements.get(MovementType.BIKE_STRAIGHT).get(0).path.get(0).y);
         rect(topLeft, PVector.sub(bottomRight, topLeft));
     }
 
@@ -410,7 +282,9 @@ class Sketch extends Applet {
     }
 
     public void createPerson() {
-        Movement movement = movements.get(getWeightedRandomMovement());
+        // Movement movement = movements.get(getWeightedRandomMovement());
+        Movement movement = generateMovement();
+
         Person person = null;
         float speed = speedCar;
         float acceleration = accelerationCar;
@@ -442,29 +316,31 @@ class Sketch extends Applet {
         traffic.add(person);
     }
 
-    public int getWeightedRandomMovement() {
-        if (!tegelijkGroen) {
-            int[][] rows = {
-                    { 1, 2, 6, 7 },
-                    { 0, 3, 4, 5, 8, 9 },
-                    { 11, 12, 16, 17 },
-                    { 15, 18, 19, 10, 13, 14 }
-            };
-
-            float r = random(1);
-            // weights: row0 most, row3 least
-            float[] weights = { 0.35f, 0.25f, 0.22f, 0.18f };
-            float sum = 0;
-            for (int i = 0; i < rows.length; i++) {
-                sum += weights[i];
-                if (r < sum) {
-                    return rows[i][(int) random(rows[i].length)];
-                }
-            }
-            return -1; // should not hit
+    public Movement generateMovement() {
+        // return movements.get(random(new int[] { 0, 1, 2, 8 }));
+        Movement movement = null;
+        Road road;
+        if (random(1) < personRoads02Chance) {
+            road = roads[random(new int[] { 0, 2 })];
         } else {
-            return (int) random(movements.size());
+            road = roads[random(new int[] { 1, 3 })];
         }
-    }
+        int index = 0;
+        if (random(1) < personCarChance) {
+            index = (int) random(road.indexBikes);
+        } else {
+            index = (int) random(road.indexBikes, road.movementTypes.length);
+        }
+        MovementType type = road.movementTypes[index];
+        if (type == MovementType.CAR_LEFT)
+            movement = road.movements.get(type).get(index);
+        else if (type == MovementType.CAR_STRAIGHT)
+            movement = road.movements.get(type).get(index - road.indexStraight);
+        else if (type == MovementType.CAR_RIGHT)
+            movement = road.movements.get(type).get(index - road.indexRight);
+        else
+            movement = road.movements.get(type).get(index - road.indexBikes);
 
+        return movement;
+    }
 }

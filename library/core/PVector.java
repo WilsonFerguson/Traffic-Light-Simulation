@@ -187,6 +187,16 @@ public class PVector {
     }
 
     /**
+     * Returns the vector where every component is the absolute value of that
+     * component.
+     * 
+     * @return PVector
+     */
+    public PVector abs() {
+        return new PVector(Math.abs(x), Math.abs(y), Math.abs(z));
+    }
+
+    /**
      * Sets the heading of the vector to {@code float} angle. (2D only)
      * 
      * @param angle
