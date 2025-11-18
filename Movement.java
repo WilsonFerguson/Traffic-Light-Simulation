@@ -5,6 +5,7 @@ class Movement extends PComponent implements EventIgnorer {
 
     ArrayList<Movement> movements;
     MovementType type;
+    int id;
 
     int greenTimeDefault;
     int yellowTime;
@@ -34,6 +35,11 @@ class Movement extends PComponent implements EventIgnorer {
 
     ArrayList<Person> traffic;
 
+    /**
+     * The special person closest to but not past the intersection. Can be null
+     */
+    Person specialPerson = null;
+
     Signal signal;
     color pathColor;
     color drawColor;
@@ -49,7 +55,8 @@ class Movement extends PComponent implements EventIgnorer {
      */
     int redStartTime = -1;
 
-    public Movement(ArrayList<Movement> movements, MovementType type, int greenTime, int yellowTime, float speed,
+    public Movement(ArrayList<Movement> movements, MovementType type, int greenTime, int yellowTime,
+            float speed,
             int laneWidth, float acceleration,
             color pathColor) {
         this.movements = movements;
@@ -77,6 +84,10 @@ class Movement extends PComponent implements EventIgnorer {
         signal = Signal.RED;
         this.pathColor = pathColor;
         drawColor = pathColor;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public void addIntroNode(double x, double y) {
@@ -235,7 +246,7 @@ class Movement extends PComponent implements EventIgnorer {
         }
     }
 
-    public void begin(Phase phase, Phase outboundPhase) {
+    public int begin(Phase phase, Phase outboundPhase) {
         this.phase = phase;
         int changeTime = frameCount;
 
@@ -245,14 +256,14 @@ class Movement extends PComponent implements EventIgnorer {
             // If I'm in the ending phase and I'm still green, just keep being green
             if (outboundPhase.movements.contains(this) && signal == Signal.GREEN) {
                 // 0 clearance time
-                return;
+                return changeTime;
             } else {
                 for (Movement movement : movements) {
                     if (!clearanceTimes.containsKey(movement))
                         continue;
                     if (movement.changingRed) {
                         changeTime = max(changeTime, movement.redStartTime + clearanceTimes.get(movement));
-                    } else {
+                    } else if (movement.signal == Signal.GREEN) {
                         // The conflicting movement is green so we need to change them red (if they
                         // aren't already going to)
                         if (movement.signalTimeline.size() == 0) {
@@ -269,6 +280,8 @@ class Movement extends PComponent implements EventIgnorer {
 
         signalTimeline.put(changeTime, Signal.GREEN);
         changingGreen = true;
+
+        return changeTime;
     }
 
     public void end() {
@@ -296,6 +309,27 @@ class Movement extends PComponent implements EventIgnorer {
                 timeUntilGreenCounter = min(timeUntilGreenCounter + 8, timeUntilGreen);
             else if (timeUntilGreen < timeUntilGreenCounter)
                 timeUntilGreenCounter = max(timeUntilGreenCounter - 8, timeUntilGreen);
+        }
+
+        // If the special person exists, check if they are past the intersection. If so
+        // update the index
+        if (specialPerson != null) {
+            if (specialPerson.currentIndex > pathIntro.size()) {
+                specialPerson = null;
+            }
+        }
+        if (specialPerson == null) {
+            // Start looking at i = 0 which is the farthest person along
+            for (int i = 0; i < traffic.size(); i++) {
+                Person person = traffic.get(i);
+                if (!person.special)
+                    continue;
+
+                if (person.currentIndex <= pathIntro.size()) {
+                    specialPerson = person;
+                    break;
+                }
+            }
         }
 
         for (Integer time : signalTimeline.keySet()) {
@@ -334,6 +368,16 @@ class Movement extends PComponent implements EventIgnorer {
             }
             tryChangingToGreen();
         }
+
+        // Shortening the current phase
+        if (specialPerson != null) {
+            // If we aren't the active phase, shorten it.
+            // NOTE: Yes we might be green right now and would want to extend it but we
+            // don't have power over extending the phase when we aren't an active movement
+            // so the best we can do is just get to an active phase as soon as possible
+            if (phase == null)
+                IntersectionManager.requestShortenedPhase();
+        }
     }
 
     public void changeToGreen() {
@@ -358,10 +402,18 @@ class Movement extends PComponent implements EventIgnorer {
     boolean waitingTraffic() {
         for (Person person : traffic) {
             int index = person.currentIndex;
+
             // Note that when index = pathIntro, the person is waiting at the signal
-            if (index < sensorIndex || index > pathIntro.size())
+            if (index > pathIntro.size())
                 continue;
 
+            // Make it so that special vehicles are counted regardless of if they have hit
+            // the sensor (so they use GPS)
+            if (person.special)
+                return true;
+
+            if (index < sensorIndex)
+                continue;
             return true;
         }
 
@@ -372,19 +424,44 @@ class Movement extends PComponent implements EventIgnorer {
         int count = 0;
         for (Person person : traffic) {
             int index = person.currentIndex;
-            if (index < sensorIndex || index > pathIntro.size())
+
+            if (index > pathIntro.size())
                 continue;
 
+            if (person.special) {
+                count++;
+                continue;
+            }
+
+            if (index < sensorIndex)
+                continue;
             count++;
         }
 
         return count;
     }
 
+    public boolean hasSpecialPerson() {
+        return specialPerson != null;
+    }
+
+    public int getSpecialPersonToIntersectionTime() {
+        if (!hasSpecialPerson())
+            return -1;
+
+        int indexDelta = pathIntro.size() - specialPerson.currentIndex;
+        // We can use the distance between two nodes and this distance will be the same
+        // for all intro nodes
+        float distance = pathIntro.get(0).dist(pathIntro.get(1));
+
+        return ceil((distance * indexDelta) / speed);
+    }
+
     public void tryChangingToGreen() {
         if (phase != null && phase.activePhase) {
             // Get max waiting time due to other traffic
             int changeTime = frameCount;
+            HashMap<Movement, Integer> movementsToChangeYellow = new HashMap<>();
             for (Movement movement : movements) {
                 if (!clearanceTimes.containsKey(movement))
                     continue;
@@ -398,14 +475,22 @@ class Movement extends PComponent implements EventIgnorer {
                 } else {
                     // So this signal is just green, so we have to force it off
                     int yellowStartTime = movement.greenStartTime + movement.greenTimeDefault;
-                    movement.signalTimeline.put(yellowStartTime, Signal.YELLOW);
+
+                    // movement.signalTimeline.put(yellowStartTime, Signal.YELLOW);
+                    movementsToChangeYellow.put(movement, yellowStartTime);
+
                     int redStartTime = yellowStartTime + movement.yellowTime;
                     changeTime = max(changeTime, redStartTime + clearanceTimes.get(movement));
                 }
             }
 
             // If we could do a minimum green time before the phase ends, let's do it
-            if (changeTime + greenTimeDefault < phase.phaseStartTime + phase.maximumTypicalGreenTime) {
+            // or if we are in the next phase
+            boolean enoughTime = changeTime + greenTimeDefault < phase.phaseStartTime
+                    + phase.maximumRealizedGreenTime;
+            boolean inNextPhase = IntersectionManager.phases
+                    .get(IntersectionManager.getProbabilisticNextPhase()).movements.contains(this);
+            if (enoughTime || inNextPhase) {
                 signalTimeline.put(changeTime, Signal.GREEN);
                 changingGreen = true;
                 changingRed = false;
@@ -418,6 +503,12 @@ class Movement extends PComponent implements EventIgnorer {
                         movement.signalTimeline.clear();
                     }
                 }
+
+                // The conflicting movements that aren't currently changing red we must change
+                // to yellow
+                for (Movement movement : movementsToChangeYellow.keySet()) {
+                    movement.signalTimeline.put(movementsToChangeYellow.get(movement), Signal.YELLOW);
+                }
             }
         } else {
             int changeTime = frameCount;
@@ -427,9 +518,11 @@ class Movement extends PComponent implements EventIgnorer {
 
                 // If there are any conflicting phases that currently have a green or are
                 // changing green, then give up
-                if (movement.signal == Signal.GREEN || movement.changingGreen)
+                if (movement.signal == Signal.GREEN || movement.changingGreen) {
                     return;
+                }
 
+                // If it's just fully red we don't have to worry about it
                 if (movement.signal == Signal.RED && !movement.changingRed)
                     continue;
 
@@ -445,7 +538,7 @@ class Movement extends PComponent implements EventIgnorer {
             // phase after will have to wait for us but it's still overall less waiting for
             // them
             Phase phase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
-            boolean enoughTime = changeTime + greenTimeDefault < phase.phaseStartTime + phase.maximumTypicalGreenTime;
+            boolean enoughTime = changeTime + greenTimeDefault < phase.phaseStartTime + phase.maximumRealizedGreenTime;
             boolean inNextPhase = IntersectionManager.phases
                     .get(IntersectionManager.getProbabilisticNextPhase()).movements
                     .contains(this);
@@ -454,6 +547,34 @@ class Movement extends PComponent implements EventIgnorer {
                 changingGreen = true;
                 changingRed = false;
             }
+        }
+    }
+
+    public void notifyShortenedPhase() {
+        // This function only applies to red signals that are changing green
+        if (!changingGreen || signal != Signal.RED)
+            return;
+
+        // If we are in the next phase we don't care about the shortening
+        boolean inNextPhase = IntersectionManager.phases
+                .get(IntersectionManager.getProbabilisticNextPhase()).movements
+                .contains(this);
+        if (inNextPhase)
+            return;
+
+        int changeTime = 0;
+        for (Integer time : signalTimeline.keySet()) {
+            if (signalTimeline.get(time) == Signal.GREEN) {
+                changeTime = time;
+                break;
+            }
+        }
+        Phase phase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
+        boolean enoughTime = changeTime + greenTimeDefault < phase.phaseStartTime + phase.maximumRealizedGreenTime;
+
+        if (!enoughTime) {
+            signalTimeline.clear();
+            changingGreen = false;
         }
     }
 
@@ -664,7 +785,7 @@ class Movement extends PComponent implements EventIgnorer {
         }
         // Return: time left of current phase + waitedPhases * max time of phase
         Phase currentPhase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
-        int currentPhaseTime = max(currentPhase.maximumTypicalGreenTime - (frameCount - currentPhase.phaseStartTime),
+        int currentPhaseTime = max(currentPhase.maximumRealizedGreenTime - (frameCount - currentPhase.phaseStartTime),
                 0);
         int waitedPhasesTime = waitedPhases * currentPhase.maximumTypicalGreenTime;
         // Let's also add on a yellowTime + exitTime because we have calculated up until

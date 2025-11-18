@@ -13,18 +13,25 @@ class Person extends PComponent implements EventIgnorer {
     float angle;
     boolean move;
 
+    /*
+     * Public transport vehicles, really
+     */
+    boolean special = false;
+
     boolean start = true;
     int movingTimer = -1;
     int movingDelay;
 
     int timeWaiting = 0;
 
-    public Person(Movement movement, float maxSpeed, float acceleration) {
+    public Person(Movement movement, float maxSpeed, float acceleration, boolean special) {
         this.movement = movement;
         movement.addTraffic(this);
         speed = 0;
         this.maxSpeed = maxSpeed;
         this.acceleration = acceleration;
+
+        this.special = special;
 
         currentIndex = 0;
         pos = movement.pathIntro.get(0).copy();
@@ -92,8 +99,10 @@ class Person extends PComponent implements EventIgnorer {
 
     public void draw() {
         noStroke();
-        fill(230, 150);
-        // circle(pos, movement.laneWidth * 0.5);
+        if (!special)
+            fill(230, 150);
+        else
+            fill(235, 64, 52, 150);
         // Only null if you first spawn in and can't move immediately so it's safe to
         // add 1
         if (dir == null) {

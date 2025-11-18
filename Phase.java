@@ -6,6 +6,9 @@ class Phase extends PComponent implements EventIgnorer {
     ArrayList<Movement> movements;
     int defaultTime;
     int maximumTypicalGreenTime;
+    int maximumRealizedGreenTime;
+    int minimumRealizedGreenTime;
+    HashSet<Person> specialPersonsExtended = new HashSet<Person>();
     boolean activePhase = false;
     int phaseStartTime = -1;
 
@@ -24,9 +27,15 @@ class Phase extends PComponent implements EventIgnorer {
     }
 
     public void begin(Phase outboundPhase) {
+        // The minimum time for this phase is the one for which all phases can just
+        // barely get a green.
+        minimumRealizedGreenTime = frameCount;
         for (Movement movement : movements) {
-            movement.begin(this, outboundPhase);
+            minimumRealizedGreenTime = max(minimumRealizedGreenTime, movement.begin(this, outboundPhase));
         }
+        minimumRealizedGreenTime += -frameCount + 1 + Sketch.greenTime;
+        setRealizedGreenTime(maximumTypicalGreenTime);
+        specialPersonsExtended.clear();
         activePhase = true;
         phaseStartTime = frameCount;
     }
@@ -40,9 +49,32 @@ class Phase extends PComponent implements EventIgnorer {
         activePhase = false;
     }
 
+    public void setRealizedGreenTime(int realizedGreenTime) {
+        maximumRealizedGreenTime = realizedGreenTime;
+        // Ensure that the realized time is at least the minimum time
+        maximumRealizedGreenTime = max(maximumRealizedGreenTime, minimumRealizedGreenTime);
+    }
+
     public void update() {
         for (Movement movement : movements) {
             movement.update();
+
+            if (movement.hasSpecialPerson()) {
+                // // Don't calculate the extension multiple times for the same person
+                // if (specialPersonsExtended.contains(movement.specialPerson))
+                // continue;
+
+                int neededMaxGreenTime = movement.getSpecialPersonToIntersectionTime() + (frameCount - phaseStartTime);
+                boolean canExtend = neededMaxGreenTime - maximumTypicalGreenTime < Sketch.phaseExtensionAllowance;
+                if (canExtend && neededMaxGreenTime > maximumRealizedGreenTime) {
+                    setRealizedGreenTime(neededMaxGreenTime);
+                    IntersectionManager.reportExtededPhase();
+                }
+
+                // Even if it we couldn't extend the phase, we have still accounted for this
+                // person
+                specialPersonsExtended.add(movement.specialPerson);
+            }
         }
 
         // If everyone is changing red, then we can stop this phase
@@ -59,9 +91,17 @@ class Phase extends PComponent implements EventIgnorer {
             }
         }
 
-        if (activePhase && frameCount >= phaseStartTime + maximumTypicalGreenTime) {
+        if (activePhase && frameCount >= phaseStartTime + maximumRealizedGreenTime) {
             end(true);
         }
     }
 
+    public boolean hasSpecialPerson() {
+        for (Movement movement : movements) {
+            if (movement.hasSpecialPerson())
+                return true;
+        }
+
+        return false;
+    }
 }
