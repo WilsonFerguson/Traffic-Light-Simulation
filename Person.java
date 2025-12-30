@@ -23,6 +23,7 @@ class Person extends PComponent implements EventIgnorer {
     int movingDelay;
 
     int timeWaiting = 0;
+    int age = 0;
 
     public Person(Movement movement, float maxSpeed, float acceleration, boolean special) {
         this.movement = movement;
@@ -45,6 +46,8 @@ class Person extends PComponent implements EventIgnorer {
     }
 
     public boolean update() {
+        age++;
+
         if (!move) {
             if (movement.canProceed(this)) {
                 move = true;

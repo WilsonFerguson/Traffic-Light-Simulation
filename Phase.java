@@ -12,6 +12,8 @@ class Phase extends PComponent implements EventIgnorer {
     boolean activePhase = false;
     int phaseStartTime = -1;
 
+    int weight = 0;
+
     public Phase(int maximumTypicalGreenTime, ArrayList<Movement> allMovements, int... indices) {
         this.maximumTypicalGreenTime = maximumTypicalGreenTime;
         movements = new ArrayList<Movement>();
@@ -38,6 +40,8 @@ class Phase extends PComponent implements EventIgnorer {
         specialPersonsExtended.clear();
         activePhase = true;
         phaseStartTime = frameCount;
+
+        weight = 0;
     }
 
     public void end(boolean callEnd) {
@@ -47,6 +51,8 @@ class Phase extends PComponent implements EventIgnorer {
             movement.phase = null;
         }
         activePhase = false;
+
+        weight = 0;
     }
 
     public void setRealizedGreenTime(int realizedGreenTime) {
@@ -88,6 +94,17 @@ class Phase extends PComponent implements EventIgnorer {
             }
             if (everyoneChangingRed) {
                 end(false);
+            }
+        } else {
+            // Weight calculation
+            weight = 0;
+            for (Movement movement : movements) {
+                for (Person person : movement.getWaitingTraffic()) {
+                    if (person.special)
+                        weight += person.age * Sketch.weightPersonSpecial;
+                    else
+                        weight += person.age * Sketch.weightPerson;
+                }
             }
         }
 

@@ -420,25 +420,26 @@ class Movement extends PComponent implements EventIgnorer {
         return false;
     }
 
-    int waitingTrafficCount() {
-        int count = 0;
+    public ArrayList<Person> getWaitingTraffic() {
+        ArrayList<Person> waitingTraffic = new ArrayList<Person>();
         for (Person person : traffic) {
-            int index = person.currentIndex;
-
-            if (index > pathIntro.size())
+            if (person.currentIndex > pathIntro.size())
                 continue;
 
             if (person.special) {
-                count++;
+                waitingTraffic.add(person);
                 continue;
             }
 
-            if (index < sensorIndex)
+            if (person.currentIndex < sensorIndex)
                 continue;
-            count++;
+            waitingTraffic.add(person);
         }
+        return waitingTraffic;
+    }
 
-        return count;
+    int waitingTrafficCount() {
+        return getWaitingTraffic().size();
     }
 
     public boolean hasSpecialPerson() {

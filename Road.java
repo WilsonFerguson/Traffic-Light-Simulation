@@ -7,10 +7,10 @@ import java.util.*;
 public class Road extends PComponent implements EventIgnorer {
 
     MovementType[] movementTypes;
+    float[] movementStartPointsX;
     /**
      * Points at the end of the intersection for each movement
      */
-    float[] movementStartPointsX;
     PVector[] movementEndpoints;
     HashMap<MovementType, ArrayList<Movement>> movements;
     /**

@@ -57,29 +57,58 @@ class IntersectionManager extends PComponent implements EventIgnorer {
 
     public static int getProbabilisticNextPhase() {
         // ------Go to the next phase in order, skip empty ones:-------
-        int next = (currentPhaseIndex + 1) % phases.size();
-
-        // If all of the movements in the new phase have no traffic, go to the next one.
-        // If this is true for all phases, then just stay where we are.
-        while (true) {
-            // The next phase has traffic, so return it
-            for (Movement movement : phases.get(next).movements) {
-                if (movement.waitingTraffic()) {
-                    return next;
-                }
-            }
-
-            // Advance the phase
-            next = (next + 1) % phases.size();
-            if (next == currentPhaseIndex) {
-                // next = (next + 1) % phases.size();
-                break;
-            }
-        }
-
-        return next;
+        // int next = (currentPhaseIndex + 1) % phases.size();
+        //
+        // // If all of the movements in the new phase have no traffic, go to the next
+        // one.
+        // // If this is true for all phases, then just stay where we are.
+        // while (true) {
+        // // The next phase has traffic, so return it
+        // for (Movement movement : phases.get(next).movements) {
+        // if (movement.waitingTraffic()) {
+        // return next;
+        // }
+        // }
+        //
+        // // Advance the phase
+        // next = (next + 1) % phases.size();
+        // if (next == currentPhaseIndex) {
+        // // next = (next + 1) % phases.size();
+        // break;
+        // }
+        // }
+        //
+        // return next;
 
         // ------Go to phase with highest weight (exclude the current phase)-------
+        HashMap<Integer, Integer> weights = new HashMap<>();
+        for (int i = 0; i < phases.size(); i++) {
+            weights.put(i, phases.get(i).weight);
+        }
+
+        ArrayList<Integer> sortedWeights = new ArrayList<>(weights.keySet());
+        Collections.sort(sortedWeights, new Comparator<Integer>() {
+            @Override
+            public int compare(Integer o1, Integer o2) {
+                return weights.get(o2) - weights.get(o1);
+            }
+        });
+
+        while (sortedWeights.size() > 0) {
+            int next = sortedWeights.get(0);
+
+            // If the best phase just has 0 weight, we won't change phases.
+            if (weights.get(next) == 0)
+                return currentPhaseIndex;
+
+            if (next != currentPhaseIndex)
+                return next;
+
+            sortedWeights.remove(0);
+        }
+
+        // No good phase found so we just stay where we are
+        return currentPhaseIndex;
     }
 
     public static void requestShortenedPhase() {

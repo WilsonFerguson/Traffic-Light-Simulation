@@ -44,10 +44,14 @@ class Sketch extends Applet {
     public static int phaseExtensionAllowance = 4 * 60; // Additional seconds that a phase can be extended, beyond the
                                                         // typical green, for special vehicles
 
-    double personCreationChance = 0.01; // Chance for person to be spawned each frame
+    // How much to increase the weight of a phase for a waiting person/special vehicle
+    public static int weightPerson = 1;
+    public static int weightPersonSpecial = 5;
+
+    double personCreationChance = 0.02; // Chance for person to be spawned each frame
     double personCarChance = 0.92; // Chance for person to be a car
-    double personRoads02Chance = 0.6; // Chance for person to be on roads 0 or 2 (main roads)
-    double personSpecialChance = 0.05; // Chance for person to be a special vehicle
+    double personRoads02Chance = 0.85; // Chance for person to be on roads 0 or 2 (main roads)
+    double personSpecialChance = 0.025; // Chance for person to be a special vehicle
 
     // Defaults:
     // Medium/heavy traffic: 0.05, 0.92, 0.85, 0.015
@@ -232,14 +236,22 @@ class Sketch extends Applet {
             person.draw();
         }
 
-        // Label road numbers (debugging)
-        for (int i = 0; i < movements.size(); i++) {
+        // // Label road numbers (debugging)
+        // for (int i = 0; i < movements.size(); i++) {
+        //     fill(255);
+        //     textSize(30);
+        //     textAlign(CENTER);
+        //     text(i, PVector.add(movements.get(i).pathIntro.get(0),
+        //             PVector.sub(PVector.center(),
+        //                     movements.get(i).pathIntro.get(0)).setMag(30)));
+        // }
+
+        // Draw weights (debugging/BTS info)
+        for (int i = 0; i < IntersectionManager.phases.size(); i++) {
             fill(255);
             textSize(30);
-            textAlign(CENTER);
-            text(i, PVector.add(movements.get(i).pathIntro.get(0),
-                    PVector.sub(PVector.center(),
-                            movements.get(i).pathIntro.get(0)).setMag(30)));
+            textAlign(LEFT);
+            text(IntersectionManager.phases.get(i).weight, 10, height - (textAscent() + textDescent() * IntersectionManager.phases.size() * 0.7f) * (IntersectionManager.phases.size() - i - 0.5));
         }
 
         textSize(50);
