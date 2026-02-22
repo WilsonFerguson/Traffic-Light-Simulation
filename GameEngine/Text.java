@@ -5,19 +5,19 @@ import library.core.*;
 public class Text extends Interactable implements EventIgnorer {
 
     // Defaults
-    public static int TEXT_SIZE = 20;
+    public static float TEXT_SIZE = 20;
     public static color TEXT_COLOR = new color(0);
 
-    public Text(PVector pos, String text, int textSize, color textColor) {
+    public Text(PVector pos, String text, double textSize, color textColor) {
         this.text = text;
         this.pos = pos;
-        this.textSize = textSize;
+        this.textSize = (float) textSize;
         this.textColor = textColor;
 
         calculateSize();
     }
 
-    public Text(double x, double y, String text, int textSize, color textColor) {
+    public Text(double x, double y, String text, double textSize, color textColor) {
         this(new PVector(x, y), text, textSize, textColor);
     }
 
@@ -29,8 +29,28 @@ public class Text extends Interactable implements EventIgnorer {
         this(x, y, text, TEXT_SIZE, TEXT_COLOR.copy());
     }
 
-    public static void setDefaults(int textSize, color textColor) {
-        TEXT_SIZE = textSize;
+    public Text copy() {
+        Text copy = new Text(pos.copy(), new String(text), textSize, textColor.copy());
+        copy.setSize(size.copy());
+        copy.onHover(onHover);
+        copy.onHoverExit(onHoverExit);
+        copy.setActive(active);
+        copy.defaultColor = defaultColor.copy();
+        copy.hoverColor = hoverColor.copy();
+        copy.activeColor = activeColor.copy();
+        copy.strokeColor = strokeColor.copy();
+        copy.textColor = textColor.copy();
+        copy.setTextAlignment(textAlignment);
+        copy.setAlpha(alpha);
+        copy.setCornerRadius(cornerRadius);
+        copy.setStrokeWeight(strokeWeight);
+        copy.setInteractive(interactive);
+
+        return copy;
+    }
+
+    public static void setDefaults(double textSize, color textColor) {
+        TEXT_SIZE = (float) textSize;
         TEXT_COLOR = textColor;
     }
 
@@ -40,9 +60,14 @@ public class Text extends Interactable implements EventIgnorer {
         return this;
     }
 
-    public Text setTextSize(int textSize) {
-        this.textSize = textSize;
+    public Text setTextSize(double textSize) {
+        this.textSize = (float) textSize;
         calculateSize();
+        return this;
+    }
+
+    public Text setTextAlignment(TextAlignment textAlignment) {
+        this.textAlignment = textAlignment;
         return this;
     }
 
@@ -64,9 +89,8 @@ public class Text extends Interactable implements EventIgnorer {
             onHoverExit();
 
         textSize(textSize);
-        fill(textColor);
+        fill(textColor, textColor.a * (alpha / 255.0f));
         textAlign(textAlignment);
         text(text, pos.x, pos.y);
     }
-
 }

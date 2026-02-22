@@ -30,6 +30,14 @@ public class Animator extends PComponent implements EventIgnorer {
     float startCornerRadius = -1;
     float endCornerRadius = -1;
 
+    // Stroke Weight
+    float startStrokeWeight = -1;
+    float endStrokeWeight = -1;
+
+    // Graph Percent Drawn
+    float startGraphPercentDrawn = -1;
+    float endGraphPercentDrawn = -1;
+
     // Color
     color referenceGenericStartColor;
     color referenceGenericEndColor;
@@ -44,16 +52,22 @@ public class Animator extends PComponent implements EventIgnorer {
     color startTextColor;
     color endTextColor;
 
+    // Alpha
+    float startAlpha = -1;
+    float endAlpha = -1;
+
     float duration = 1;
     float startTime = 0;
 
     float delayStartTime = 0; // How long to delay the animation before starting
+    boolean shouldAnimate = true;
 
     UIElement element;
     Interactable interactable;
 
-    Runnable onComplete;
     Runnable onBegin;
+    Runnable onUpdate;
+    Runnable onComplete;
 
     LerpType lerpType = LerpType.SMOOTH;
 
@@ -62,27 +76,27 @@ public class Animator extends PComponent implements EventIgnorer {
     // Animation constants
     public static float colorLerpAmount = 0.2f;
 
-    public Animator(PVector referencePos, PVector referenceSize, double duration) {
+    public Animator(PVector referencePos, PVector referenceSize, double seconds) {
         this.referencePos = referencePos;
         this.referenceSize = referenceSize;
 
-        this.duration = (float) duration * 1000;
+        this.duration = (float) seconds * 1000;
         startTime = millis();
 
         animators.add(this);
     }
 
-    public Animator(color referenceGenericColor, double duration) {
+    public Animator(color referenceGenericColor, double seconds) {
         this.referenceGenericColor = referenceGenericColor;
 
-        this.duration = (float) duration * 1000;
+        this.duration = (float) seconds * 1000;
         startTime = millis();
 
         animators.add(this);
     }
 
-    public Animator(UIElement element, double duration) {
-        this(element.pos, element.size, duration);
+    public Animator(UIElement element, double seconds) {
+        this(element.pos, element.size, seconds);
 
         this.element = element;
         if (element instanceof Interactable) {
@@ -90,6 +104,11 @@ public class Animator extends PComponent implements EventIgnorer {
         }
     }
 
+    /**
+     * Sets the lerp type for the animation. Note that {@code SUPER_SMOOTH} is a
+     * more
+     * exaggerated version of the ease-in-out {@code SMOOTH} lerp type.
+     */
     public Animator setLerpType(LerpType lerpType) {
         this.lerpType = lerpType;
         return this;
@@ -235,8 +254,56 @@ public class Animator extends PComponent implements EventIgnorer {
     }
 
     public Animator setCornerRadius(double endCornerRadius) {
-        startCornerRadius = ((Interactable) element).cornerRadius;
+        if (element instanceof Panel)
+            startCornerRadius = ((Panel) element).getCornerRadius();
+        else if (element instanceof Interactable)
+            startCornerRadius = ((Interactable) element).cornerRadius;
+        else
+            throw new RuntimeException(
+                    "Attempted to animate corner radius on a non-panel or non-interactable element. The element must be an instance of Panel or Interactable, but it is an instance of "
+                            + element.getClass().getName());
+
         this.endCornerRadius = (float) endCornerRadius;
+        return this;
+    }
+
+    public Animator setStrokeWeight(double startStrokeWeight, double endStrokeWeight) {
+        this.startStrokeWeight = (float) startStrokeWeight;
+        this.endStrokeWeight = (float) endStrokeWeight;
+        return this;
+    }
+
+    public Animator setStrokeWeight(double endStrokeWeight) {
+        if (element instanceof Interactable)
+            startStrokeWeight = (float) ((Interactable) element).strokeWeight;
+        else
+            throw new RuntimeException(
+                    "Attempted to animate stroke weight on a non-interactable element. The element must be an instance of Interactable, but it is an instance of "
+                            + element.getClass().getName());
+
+        this.endStrokeWeight = (float) endStrokeWeight;
+        return this;
+    }
+
+    public Animator setGraphPercentDrawn(double startGraphPercentDrawn, double endGraphPercentDrawn) {
+        if (!(element instanceof Graph)) {
+            throw new RuntimeException(
+                    "Attempted to animate graph percent drawn on a non-graph element. The element must be an instance of Graph, but it is an instance of "
+                            + element.getClass().getName());
+        }
+        this.startGraphPercentDrawn = (float) startGraphPercentDrawn;
+        this.endGraphPercentDrawn = (float) endGraphPercentDrawn;
+        return this;
+    }
+
+    public Animator setGraphPercentDrawn(double endGraphPercentDrawn) {
+        if (!(element instanceof Graph)) {
+            throw new RuntimeException(
+                    "Attempted to animate graph percent drawn on a non-graph element. The element must be an instance of Graph, but it is an instance of "
+                            + element.getClass().getName());
+        }
+        startGraphPercentDrawn = ((Graph) element).getPercentDrawn();
+        this.endGraphPercentDrawn = (float) endGraphPercentDrawn;
         return this;
     }
 
@@ -381,10 +448,156 @@ public class Animator extends PComponent implements EventIgnorer {
         return this;
     }
 
-    public Animator delay(double delay) {
+    public Animator setAlpha(double startAlpha, double endAlpha) {
+        this.startAlpha = (float) startAlpha;
+        this.endAlpha = (float) endAlpha;
+        return this;
+    }
+
+    public Animator setAlpha(double endAlpha) {
+        if (element != null)
+            startAlpha = element.getAlpha();
+        else if (referenceGenericColor != null)
+            startAlpha = referenceGenericColor.getAlpha();
+        else
+            throw new RuntimeException(
+                    "The animator was created without a reference element or color, and so it could not automatically find a starting alpha value. Either use the other setAlpha method or provide a reference element or color.");
+
+        this.endAlpha = (float) endAlpha;
+        return this;
+    }
+
+    /**
+     * Sets all possible parameters from a given element. This element can be of any
+     * type, so long as it ultimately extends {@code UIElement}.
+     * <br>
+     * For example, if you pass a {@code Button}, it will copy all of the
+     * {@code Button}'s properties as final values for the animation.
+     * <br>
+     * <br>
+     * The initial values of the animation will be automatically set to the current
+     * state of the animator's element (if provided). Otherwise they will be left as
+     * null. Because of this, you will probably always call this function on an
+     * {@code Animator} that has been assigned an element in its constructor.
+     * <br>
+     * <br>
+     * More temporary states such as {@code isHovered} or {@code active} will not be
+     * copied.
+     */
+    public Animator setFromElement(UIElement object) {
+        // UIElement properties
+        endPos = object.getPos().copy();
+        startPos = element.pos.copy();
+
+        endSize = object.getSize().copy();
+        startSize = element.getSize().copy();
+
+        endAlpha = object.getAlpha();
+        if (element != null)
+            startAlpha = element.getAlpha();
+        else if (referenceGenericColor != null)
+            startAlpha = referenceGenericColor.getAlpha();
+
+        // Interactable properties
+        if (object instanceof Interactable) {
+            Interactable objectInteractable = (Interactable) object;
+
+            endDefaultColor = objectInteractable.defaultColor.copy();
+            endHoverColor = objectInteractable.hoverColor.copy();
+            endActiveColor = objectInteractable.activeColor.copy();
+            endStrokeColor = objectInteractable.strokeColor.copy();
+            endTextColor = objectInteractable.textColor.copy();
+
+            endTextSize = objectInteractable.textSize;
+            endCornerRadius = objectInteractable.cornerRadius;
+            endStrokeWeight = (float) objectInteractable.strokeWeight;
+
+            if (interactable != null) {
+                startDefaultColor = interactable.defaultColor.copy();
+                startHoverColor = interactable.hoverColor.copy();
+                startActiveColor = interactable.activeColor.copy();
+                startStrokeColor = interactable.strokeColor.copy();
+                startTextColor = interactable.textColor.copy();
+
+                startTextSize = interactable.textSize;
+                startCornerRadius = interactable.cornerRadius;
+                startStrokeWeight = (float) interactable.strokeWeight;
+            }
+        }
+
+        // Inidividual properties
+        if (object instanceof Graph) {
+            Graph objectGraph = (Graph) object;
+            endGraphPercentDrawn = objectGraph.getPercentDrawn();
+
+            if (element instanceof Graph) {
+                startGraphPercentDrawn = ((Graph) element).getPercentDrawn();
+            }
+        }
+
+        return this;
+    }
+
+    /**
+     * Sets both the initial and final values of the animation from the given
+     * objects.
+     */
+    public Animator setFromElement(UIElement start, UIElement end) {
+        UIElement elementTemp = element;
+        Interactable interactableTemp = interactable;
+
+        element = start;
+        interactable = start instanceof Interactable ? (Interactable) start : null;
+        setFromElement(end);
+        element = elementTemp;
+        interactable = interactableTemp;
+
+        return this;
+    }
+
+    /**
+     * Sets whether the animation should animate or not. If you set this to
+     * {@code false}, the animation will not play until you either set it to
+     * {@code true} or call the {@link #start()} method (and then it will start
+     * after the specified delay).
+     *
+     * By default, this is set to {@code true} and so the animation will start
+     * immediately (or after the delay is up).
+     *
+     * If the animation is already running and you set this to {@code false}, it
+     * will stop. Upon setting it to {@code true}, it will start from the beginning.
+     */
+    public Animator setShouldAnimate(boolean shouldAnimate) {
+        this.shouldAnimate = shouldAnimate;
+        if (shouldAnimate)
+            startTime = millis() + delayStartTime;
+
+        return this;
+    }
+
+    public boolean getShouldAnimate() {
+        return shouldAnimate;
+    }
+
+    public Animator start() {
+        this.shouldAnimate = true;
+        startTime = millis() + delayStartTime;
+
+        return this;
+    }
+
+    public Animator setDelay(double delay) {
         delayStartTime = (float) delay * 1000;
         startTime += delayStartTime;
         return this;
+    }
+
+    /**
+     * @deprecated Use setDelay instead
+     */
+    @Deprecated
+    public Animator delay(double delay) {
+        return setDelay(delay);
     }
 
     /**
@@ -417,22 +630,72 @@ public class Animator extends PComponent implements EventIgnorer {
             onBegin.run();
     }
 
+    public Animator onUpdate(Runnable onUpdate) {
+        this.onUpdate = onUpdate;
+        return this;
+    }
+
+    private void onUpdate() {
+        if (onUpdate != null)
+            onUpdate.run();
+    }
+
     public float lerpFunction(double start, double stop, double amt) {
-        if (lerpType == LerpType.LINEAR)
-            return lerp(start, stop, amt);
-        else if (lerpType == LerpType.SMOOTH)
-            return lerpSmooth(start, stop, amt);
-        else if (lerpType == LerpType.OVERSHOOT)
-            return lerpOvershoot(start, stop, amt);
-        else
-            return lerp(start, stop, amt);
+        if (amt == 1)
+            return (float) stop;
+
+        switch (lerpType) {
+            case LINEAR:
+                return lerp((float) start, (float) stop, (float) amt);
+            case SMOOTH:
+                return lerpSmooth(start, stop, amt);
+            case SUPER_SMOOTH:
+                return lerpSuperSmooth(start, stop, amt);
+            case CONSTANT_ACCELERATION:
+                return lerpConstantAcceleration(start, stop, amt);
+            case CONSTANT_DECELERATION:
+                return lerpConstantDeceleration(start, stop, amt);
+            case OVERSHOOT:
+                return lerpOvershoot(start, stop, amt);
+            default:
+                return lerp((float) start, (float) stop, (float) amt);
+        }
+    }
+
+    public color lerpFunctionColor(color start, color stop, double amt) {
+        if (amt == 1)
+            return stop;
+
+        switch (lerpType) {
+            case LINEAR:
+                return lerpColor(start, stop, (float) amt);
+            case SMOOTH:
+                return lerpColor(start, stop, lerpSmooth(0, 1, amt));
+            case SUPER_SMOOTH:
+                return lerpColor(start, stop, lerpSuperSmooth(0, 1, amt));
+            case CONSTANT_ACCELERATION:
+                return lerpColor(start, stop, lerpConstantAcceleration(0, 1, amt));
+            case CONSTANT_DECELERATION:
+                return lerpColor(start, stop, lerpConstantDeceleration(0, 1, amt));
+            case OVERSHOOT:
+                return lerpColor(start, stop, lerpOvershoot(0, 1, amt));
+            default:
+                return lerpColor(start, stop, (float) amt);
+        }
     }
 
     private void animatePosSize(double amt) {
         // Position
         if (startPos != null && endPos != null) {
-            referencePos.x = lerpFunction(startPos.x, endPos.x, amt);
-            referencePos.y = lerpFunction(startPos.y, endPos.y, amt);
+            // If we are animating a UI element, then use the setPos function
+            if (element != null) {
+                float x = lerpFunction(startPos.x, endPos.x, amt);
+                float y = lerpFunction(startPos.y, endPos.y, amt);
+                element.setPos(new PVector(x, y));
+            } else {
+                referencePos.x = lerpFunction(startPos.x, endPos.x, amt);
+                referencePos.y = lerpFunction(startPos.y, endPos.y, amt);
+            }
 
             // TODO Refactor this code:
             if (element instanceof Switch) {
@@ -444,8 +707,15 @@ public class Animator extends PComponent implements EventIgnorer {
         }
         // Size
         if (startSize != null && endSize != null) {
-            referenceSize.x = lerpFunction(startSize.x, endSize.x, amt);
-            referenceSize.y = lerpFunction(startSize.y, endSize.y, amt);
+            // If we are animating a UI element, then use the setSize function
+            if (element != null) {
+                float w = lerpFunction(startSize.x, endSize.x, amt);
+                float h = lerpFunction(startSize.y, endSize.y, amt);
+                element.setSize(new PVector(w, h));
+            } else {
+                referenceSize.x = lerpFunction(startSize.x, endSize.x, amt);
+                referenceSize.y = lerpFunction(startSize.y, endSize.y, amt);
+            }
 
             // TODO Refactor this code:
             if (element instanceof Switch) {
@@ -460,13 +730,36 @@ public class Animator extends PComponent implements EventIgnorer {
 
     public void animateTextSize(double amt) {
         if (startTextSize != -1 && interactable != null) {
-            interactable.setTextSize((int) lerpFunction(startTextSize, endTextSize, amt));
+            interactable.setTextSize(lerpFunction(startTextSize, endTextSize, amt));
         }
     }
 
     public void animateCornerRadius(double amt) {
         if (startCornerRadius != -1 && interactable != null) {
-            interactable.setCornerRadius((int) lerpFunction(startCornerRadius, endCornerRadius, amt));
+            interactable.setCornerRadius(lerpFunction(startCornerRadius, endCornerRadius, amt));
+        }
+    }
+
+    public void animateStrokeWeight(double amt) {
+        if (startStrokeWeight != -1 && interactable != null) {
+            interactable.setStrokeWeight(lerpFunction(startStrokeWeight, endStrokeWeight, amt));
+        }
+    }
+
+    public void animateGraphPercentDrawn(double amt) {
+        if (startGraphPercentDrawn != -1 && element instanceof Graph) {
+            ((Graph) element).setPercentDrawn(lerpFunction(startGraphPercentDrawn, endGraphPercentDrawn, amt));
+        }
+    }
+
+    public void animateAlpha(double amt) {
+        if (startAlpha != -1 && endAlpha != -1) {
+            float newAlpha = lerpFunction(startAlpha, endAlpha, amt);
+            if (element != null) {
+                element.setAlpha(newAlpha);
+            } else if (referenceGenericColor != null) {
+                referenceGenericColor.setAlpha(newAlpha);
+            }
         }
     }
 
@@ -474,26 +767,30 @@ public class Animator extends PComponent implements EventIgnorer {
         // Colors
         if (interactable != null) {
             if (startDefaultColor != null)
-                interactable.defaultColor.setColor(lerpColor(startDefaultColor, endDefaultColor, amt));
+                interactable.defaultColor.setColor(lerpFunctionColor(startDefaultColor, endDefaultColor, amt));
             if (startHoverColor != null)
-                interactable.hoverColor.setColor(lerpColor(startHoverColor, endHoverColor, amt));
+                interactable.hoverColor.setColor(lerpFunctionColor(startHoverColor, endHoverColor, amt));
             if (startActiveColor != null)
-                interactable.activeColor.setColor(lerpColor(startActiveColor, endActiveColor, amt));
+                interactable.activeColor.setColor(lerpFunctionColor(startActiveColor, endActiveColor, amt));
             if (startStrokeColor != null)
-                interactable.strokeColor.setColor(lerpColor(startStrokeColor, endStrokeColor, amt));
+                interactable.strokeColor.setColor(lerpFunctionColor(startStrokeColor, endStrokeColor, amt));
             if (startTextColor != null)
-                interactable.textColor.setColor(lerpColor(startTextColor, endTextColor, amt));
+                interactable.textColor.setColor(lerpFunctionColor(startTextColor, endTextColor, amt));
         }
 
         // Generic color
-        if (referenceGenericColor != null) {
-            color newColor = lerpColor(referenceGenericStartColor, referenceGenericEndColor, amt);
+        if (referenceGenericColor != null && referenceGenericStartColor != null
+                && referenceGenericEndColor != null) {
+            color newColor = lerpFunctionColor(referenceGenericStartColor, referenceGenericEndColor, amt);
             referenceGenericColor.setColor(newColor);
         }
     }
 
     public void animate() {
         // Delay
+        if (!shouldAnimate)
+            return;
+
         if (millis() - (startTime - delayStartTime) < delayStartTime)
             return;
 
@@ -508,11 +805,17 @@ public class Animator extends PComponent implements EventIgnorer {
         animatePosSize(amt);
         animateTextSize(amt);
         animateCornerRadius(amt);
+        animateStrokeWeight(amt);
+        animateGraphPercentDrawn(amt);
+        animateAlpha(amt);
         animateColors(amt);
 
+        onUpdate();
+
         if (amt == 1) {
-            onEnd();
             animators.remove(this);
+            PComponent.delete(this);
+            onEnd();
         }
     }
 

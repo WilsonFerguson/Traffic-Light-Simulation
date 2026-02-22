@@ -7,11 +7,13 @@ class Sketch extends Applet {
     ArrayList<Movement> movements;
     ArrayList<Movement> movementsCars;
     ArrayList<Movement> movementsBikes;
+    ArrayList<Movement> movementsPedestrians;
 
     ArrayList<Person> traffic;
 
     ArrayList<Integer> timeWaitingCars;
     ArrayList<Integer> timeWaitingBikes;
+    ArrayList<Integer> timeWaitingPedestrians;
     ArrayList<Integer> timeWaitingSpecials;
     /**
      * Shortening, extension, splice
@@ -33,7 +35,7 @@ class Sketch extends Applet {
     public static float speedBike = 4.16f * unitsPerMeter / 60.0f;
     public static float speedCar = 8.3f * unitsPerMeter / 60.0f;
     public static float speedCarTurn = 7 * unitsPerMeter / 60.0f; // 5
-    public static float speedWalk = 1.4f * unitsPerMeter / 60.0f;
+    public static float speedWalk = 1.8f * unitsPerMeter / 60.0f;
 
     public static int yellowCar = (int) Math.ceil(2.5 * 60);
     public static int yellowBike = 2 * 60;
@@ -44,18 +46,19 @@ class Sketch extends Applet {
     public static int phaseExtensionAllowance = 4 * 60; // Additional seconds that a phase can be extended, beyond the
                                                         // typical green, for special vehicles
 
-    // How much to increase the weight of a phase for a waiting person/special vehicle
+    // How much to increase the weight of a phase for a waiting person/special
+    // vehicle
     public static int weightPerson = 1;
     public static int weightPersonSpecial = 5;
 
-    double personCreationChance = 0.02; // Chance for person to be spawned each frame
+    double personCreationChance = 0.005; // Chance for person to be spawned each frame
     double personCarChance = 0.92; // Chance for person to be a car
     double personRoads02Chance = 0.85; // Chance for person to be on roads 0 or 2 (main roads)
-    double personSpecialChance = 0.025; // Chance for person to be a special vehicle
+    double personSpecialChance = 0.035; // Chance for person to be a special vehicle
 
     // Defaults:
     // Medium/heavy traffic: 0.05, 0.92, 0.85, 0.015
-    // Light traffic: 0.01, 0.92, 0.6, 0.05
+    // Light traffic: 0.02, 0.92, 0.85, 0.025
 
     /**
      * If true, then bikes will only use tegelijk groen. If false, they will never
@@ -65,7 +68,10 @@ class Sketch extends Applet {
 
     public static int laneWidthCar = 3 * unitsPerMeter;
     public static int laneWidthBike = 2 * unitsPerMeter;
+    public static int laneWidthPed = laneWidthBike;
     public static float centerMedian;
+
+    boolean editMode = false;
 
     private class PhaseDirection {
         int roadIndex;
@@ -89,10 +95,12 @@ class Sketch extends Applet {
         movements = new ArrayList<Movement>();
         movementsCars = new ArrayList<Movement>();
         movementsBikes = new ArrayList<Movement>();
+        movementsPedestrians = new ArrayList<Movement>();
 
         traffic = new ArrayList<Person>();
         timeWaitingCars = new ArrayList<Integer>();
         timeWaitingBikes = new ArrayList<Integer>();
+        timeWaitingPedestrians = new ArrayList<Integer>();
         timeWaitingSpecials = new ArrayList<Integer>();
 
         MovementType CL = MovementType.CAR_LEFT;
@@ -100,12 +108,16 @@ class Sketch extends Applet {
         MovementType CR = MovementType.CAR_RIGHT;
         MovementType BS = MovementType.BIKE_STRAIGHT;
         MovementType BT = MovementType.BIKE_TEGELIJK;
+        /**
+         * Note: PD is included twice for the two stages
+         */
+        MovementType PD = MovementType.PEDESTRIAN;
 
         roads = new Road[4];
-        roads[0] = new Road(0).addMovements(CL, CS, CS, CR, BS);
-        roads[1] = new Road(-PI / 2).addMovements(CL, CS, CS, CR, BS);
-        roads[2] = new Road(PI).addMovements(CL, CS, CS, CR, BS);
-        roads[3] = new Road(PI / 2).addMovements(CL, CS, CS, CR, BS);
+        roads[0] = new Road(0, Origin.SOUTH).addMovements(CL, CS, CS, CR, BS, PD, PD);
+        roads[1] = new Road(-PI / 2, Origin.EAST).addMovements(CL, CS, CS, CR, BS, PD, PD);
+        roads[2] = new Road(PI, Origin.NORTH).addMovements(CL, CS, CS, CR, BS, PD, PD);
+        roads[3] = new Road(PI / 2, Origin.WEST).addMovements(CL, CS, CS, CR, BS, PD, PD);
 
         for (int i = 0; i < 4; i++) {
             roads[i].getOtherRoads(roads, i);
@@ -117,7 +129,7 @@ class Sketch extends Applet {
             road.createEndPoints();
         }
         for (Road road : roads) {
-            road.createMovements(movements, movementsCars, movementsBikes);
+            road.createMovements(movements, movementsCars, movementsBikes, movementsPedestrians);
         }
 
         for (int i = 0; i < movements.size(); i++) {
@@ -127,10 +139,10 @@ class Sketch extends Applet {
 
         IntersectionManager.movements = movements;
         if (!tegelijkGroen) {
-            Phase phase1 = createPhase(new PhaseDirection(0, CS, BS), new PhaseDirection(2, CS, BS));
+            Phase phase1 = createPhase(new PhaseDirection(0, CS, BS, PD), new PhaseDirection(2, CS, BS, PD));
             Phase phase2 = createPhase(new PhaseDirection(0, CL, CR), new PhaseDirection(2, CL, CR),
                     new PhaseDirection(1, CR), new PhaseDirection(3, CR));
-            Phase phase3 = createPhase(new PhaseDirection(1, CS, BS), new PhaseDirection(3, CS, BS));
+            Phase phase3 = createPhase(new PhaseDirection(1, CS, BS, PD), new PhaseDirection(3, CS, BS, PD));
             Phase phase4 = createPhase(new PhaseDirection(1, CL, CR), new PhaseDirection(3, CL, CR),
                     new PhaseDirection(0, CR), new PhaseDirection(2, CR));
             IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
@@ -143,8 +155,8 @@ class Sketch extends Applet {
                     new PhaseDirection(2, CR), new PhaseDirection(3, CS, CR));
             Phase phase4 = createPhase(new PhaseDirection(0, CR), new PhaseDirection(1, CL, CR),
                     new PhaseDirection(2, CR), new PhaseDirection(3, CL, CR));
-            Phase phase5 = createPhase(new PhaseDirection(0, BS, BT), new PhaseDirection(1, BS, BT),
-                    new PhaseDirection(2, BS, BT), new PhaseDirection(3, BS, BT));
+            Phase phase5 = createPhase(new PhaseDirection(0, BS, BT, PD), new PhaseDirection(1, BS, BT, PD),
+                    new PhaseDirection(2, BS, BT, PD), new PhaseDirection(3, BS, BT, PD));
             IntersectionManager.addPhases(phase1, phase2, phase3, phase4, phase5);
         }
 
@@ -208,15 +220,41 @@ class Sketch extends Applet {
             if (movement.signal == Signal.GREEN)
                 movement.draw();
         }
+        for (Movement movement : movementsPedestrians) {
+            movement.draw();
+        }
+
+        for (Movement movement : movements) {
+            movement.drawHighlight();
+        }
 
         // Draw traffic lights at end so they are on top
         for (Movement movement : movements) {
-            movement.drawTrafficLightAndStopline();
+            movement.drawTrafficLightAndStoplineAndArrows();
         }
 
         for (int i = traffic.size() - 1; i >= 0; i--) {
             Person person = traffic.get(i);
             if (person.update()) {
+                if (person.movement.type == MovementType.PEDESTRIAN) {
+                    boolean first = person.movement.road.movements.get(MovementType.PEDESTRIAN)
+                            .indexOf(person.movement) == 0;
+                    Movement secondMovement = person.movement.road.movements.get(MovementType.PEDESTRIAN).get(1);
+                    if (first) {
+                        person.movement.removeTraffic(person);
+
+                        secondMovement.addTraffic(person);
+                        person.movement = secondMovement;
+                        person.currentIndex = 0;
+                        person.pos = secondMovement.pathIntro.get(0).copy();
+                        person.speed = secondMovement.speed;
+                        person.move = true;
+
+                        person.draw();
+                        continue;
+                    }
+                }
+
                 person.movement.removeTraffic(person);
                 traffic.remove(i);
 
@@ -229,6 +267,8 @@ class Sketch extends Applet {
                 } else if (person.movement.type == MovementType.BIKE_STRAIGHT
                         || person.movement.type == MovementType.BIKE_TEGELIJK) {
                     timeWaitingBikes.add(person.timeWaiting);
+                } else if (person.movement.type == MovementType.PEDESTRIAN) {
+                    timeWaitingPedestrians.add(person.timeWaiting);
                 }
 
                 continue;
@@ -238,12 +278,12 @@ class Sketch extends Applet {
 
         // // Label road numbers (debugging)
         // for (int i = 0; i < movements.size(); i++) {
-        //     fill(255);
-        //     textSize(30);
-        //     textAlign(CENTER);
-        //     text(i, PVector.add(movements.get(i).pathIntro.get(0),
-        //             PVector.sub(PVector.center(),
-        //                     movements.get(i).pathIntro.get(0)).setMag(30)));
+        // fill(255);
+        // textSize(30);
+        // textAlign(CENTER);
+        // text(i, PVector.add(movements.get(i).pathIntro.get(0),
+        // PVector.sub(PVector.center(),
+        // movements.get(i).pathIntro.get(0)).setMag(30)));
         // }
 
         // Draw weights (debugging/BTS info)
@@ -251,7 +291,9 @@ class Sketch extends Applet {
             fill(255);
             textSize(30);
             textAlign(LEFT);
-            text(IntersectionManager.phases.get(i).weight, 10, height - (textAscent() + textDescent() * IntersectionManager.phases.size() * 0.7f) * (IntersectionManager.phases.size() - i - 0.5));
+            text(IntersectionManager.phases.get(i).weight, 10,
+                    height - (textAscent() + textDescent() * IntersectionManager.phases.size() * 0.7f)
+                            * (IntersectionManager.phases.size() - i - 0.5));
         }
 
         textSize(50);
@@ -278,6 +320,17 @@ class Sketch extends Applet {
                     140);
         }
 
+        if (timeWaitingPedestrians.size() > 0) {
+            int timeWaitingPedestriansSum = 0;
+            for (int i = 0; i < timeWaitingPedestrians.size(); i++) {
+                timeWaitingPedestriansSum += timeWaitingPedestrians.get(i);
+            }
+            textSize(30);
+            text("Pedestrians: "
+                    + round((float) timeWaitingPedestriansSum / (float) timeWaitingPedestrians.size() / 60.0, 1)
+                    + " s", 10, 180);
+        }
+
         if (timeWaitingSpecials.size() > 0) {
             int timeWaitingSpecialsSum = 0;
             for (int i = 0; i < timeWaitingSpecials.size(); i++) {
@@ -285,7 +338,7 @@ class Sketch extends Applet {
             }
             textSize(30);
             text("Specials: " + round((float) timeWaitingSpecialsSum / (float) timeWaitingSpecials.size() / 60.0, 1)
-                    + " s", 10, 180);
+                    + " s", 10, 220);
         }
 
         textSize(40);
@@ -350,17 +403,37 @@ class Sketch extends Applet {
                 println(movement.clearanceTimes.get(movement2));
             }
             temp = "";
+        } else if (key == 'e') {
+            editMode = !editMode;
         } else {
             temp += key;
         }
     }
 
     public void mousePressed() {
-        int[] carIndices = new int[movementsCars.size()];
-        for (int i = 0; i < carIndices.length; i++) {
-            carIndices[i] = movementsCars.get(i).id;
+        if (editMode) {
+            Movement movement = highlightMovement();
+        } else {
+            int[] carIndices = new int[movementsCars.size()];
+            for (int i = 0; i < carIndices.length; i++) {
+                carIndices[i] = movementsCars.get(i).id;
+            }
+            createPerson(true, carIndices);
         }
-        createPerson(true, carIndices);
+    }
+
+    public Movement highlightMovement() {
+        Movement movement = null;
+        for (Movement m : movements) {
+            if (m.hover()) {
+                movement = m;
+                break;
+            }
+        }
+        if (movement == null)
+            return null;
+        movement.highlight = !movement.highlight;
+        return movement;
     }
 
     public void createPerson(boolean specialGiven, int... index) {
@@ -395,6 +468,8 @@ class Sketch extends Applet {
                 special = random(1) < personSpecialChance;
                 break;
             case PEDESTRIAN:
+                speed = speedWalk;
+                acceleration = speedWalk;
                 break;
         }
 
@@ -431,8 +506,10 @@ class Sketch extends Applet {
             movement = road.movements.get(type).get(index - road.indexStraight);
         else if (type == MovementType.CAR_RIGHT)
             movement = road.movements.get(type).get(index - road.indexRight);
-        else
+        else if (type.toString().contains("BIKE"))
             movement = road.movements.get(type).get(index - road.indexBikes);
+        else if (type == MovementType.PEDESTRIAN)
+            movement = road.movements.get(type).get(0);
 
         return movement;
     }

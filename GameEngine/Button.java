@@ -10,16 +10,8 @@ public class Button extends Interactable {
     private static Button defaultButton = new Button(0, 0, 300, 100, new color(200), new color(230), new color(180),
             new color(0), "Button", 20, new color(0));
 
-    private static PVector DEFAULT_SIZE = new PVector(300, 100);
-    private static color DEFAULT_COLOR = new color(255);
-    private static color HOVER_COLOR = new color(200);
-    private static color ACTIVE_COLOR = new color(150);
-    private static color STROKE_COLOR = new color(0);
-    private static int TEXT_SIZE = 20;
-    private static color TEXT_COLOR = new color(0);
-
     public Button(PVector pos, PVector size, color defaultColor, color hoverColor, color activeColor,
-            color strokeColor, String text, int textSize, color textColor) {
+            color strokeColor, String text, double textSize, color textColor) {
         this.pos = pos;
         this.size = size;
 
@@ -29,27 +21,19 @@ public class Button extends Interactable {
         this.strokeColor = strokeColor;
 
         this.text = text;
-        this.textSize = textSize;
+        this.textSize = (float) textSize;
         this.textColor = textColor;
 
         currentColor = defaultColor;
     }
 
     public Button(double x, double y, double w, double h, color defaultColor, color hoverColor, color activeColor,
-            color strokeColor, String text, int textSize, color textColor) {
+            color strokeColor, String text, double textSize, color textColor) {
         this(new PVector(x, y), new PVector(w, h), defaultColor, hoverColor, activeColor, strokeColor, text, textSize,
                 textColor);
     }
 
     public Button(PVector pos, PVector size, String text) {
-        // this(pos, size, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
-        // ACTIVE_COLOR.copy(), STROKE_COLOR.copy(), text,
-        // TEXT_SIZE, TEXT_COLOR.copy());
-        // this(pos, size, defaultButton.defaultColor.copy(),
-        // defaultButton.hoverColor.copy(),
-        // defaultButton.activeColor.copy(),
-        // defaultButton.strokeColor.copy(), text, defaultButton.textSize,
-        // defaultButton.textColor.copy());
         clone(defaultButton);
         this.pos = pos;
         this.size = size;
@@ -57,46 +41,20 @@ public class Button extends Interactable {
     }
 
     public Button(double x, double y, double w, double h, String text) {
-        // this(x, y, w, h, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
-        // ACTIVE_COLOR.copy(), STROKE_COLOR.copy(), text,
-        // TEXT_SIZE, TEXT_COLOR.copy());
-        // this(x, y, w, h, defaultButton.defaultColor.copy(),
-        // defaultButton.hoverColor.copy(),
-        // defaultButton.activeColor.copy(),
-        // defaultButton.strokeColor.copy(), text, defaultButton.textSize,
-        // defaultButton.textColor.copy());
         this(new PVector(x, y), new PVector(w, h), text);
     }
 
     public Button(PVector pos, String text) {
-        // this(pos, DEFAULT_SIZE.copy(), DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
-        // ACTIVE_COLOR.copy(),
-        // STROKE_COLOR.copy(), text, TEXT_SIZE, TEXT_COLOR.copy());
-        // this(pos, defaultButton.size.copy(), defaultButton.defaultColor.copy(),
-        // defaultButton.hoverColor.copy(),
-        // defaultButton.activeColor.copy(), defaultButton.strokeColor.copy(), text,
-        // defaultButton.textSize,
-        // defaultButton.textColor.copy());
         this(pos, defaultButton.size.copy(), text);
     }
 
     public Button(double x, double y, String text) {
-        // this(x, y, DEFAULT_SIZE.copy().x, DEFAULT_SIZE.copy().y,
-        // DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
-        // ACTIVE_COLOR.copy(), STROKE_COLOR.copy(), text,
-        // TEXT_SIZE, TEXT_COLOR.copy());
-        // this(x, y, defaultButton.size.copy().x, defaultButton.size.copy().y,
-        // defaultButton.defaultColor.copy(),
-        // defaultButton.hoverColor.copy(), defaultButton.activeColor.copy(),
-        // defaultButton.strokeColor.copy(),
-        // text,
-        // defaultButton.textSize, defaultButton.textColor.copy());
         this(new PVector(x, y), text);
     }
 
     public Button copy() {
         Button copy = new Button(pos.copy(), size.copy(), defaultColor.copy(), hoverColor.copy(), activeColor.copy(),
-                strokeColor.copy(), text, textSize, textColor.copy());
+                strokeColor.copy(), new String(text), textSize, textColor.copy());
         copy.onClick(onClick);
         copy.onHover(onHover);
         copy.onHoverExit(onHoverExit);
@@ -104,6 +62,9 @@ public class Button extends Interactable {
         copy.setInteractive(interactive);
         copy.setActive(active);
         copy.setTextAlignment(textAlignment);
+        copy.setAlpha(alpha);
+        copy.setCornerRadius(cornerRadius);
+        copy.setStrokeWeight(strokeWeight);
         return copy;
     }
 
@@ -132,21 +93,14 @@ public class Button extends Interactable {
         defaultButton = defaults;
     }
 
-    public static Button getDefaults() {
-        return defaultButton;
+    public static void setDefaults(PVector defaultSize, color defaultColor, color hoverColor, color activeColor,
+            color strokeColor, double textSize, color textColor) {
+        defaultButton = new Button(PVector.zero(), defaultSize, defaultColor, hoverColor, activeColor, strokeColor, "",
+                textSize, textColor);
     }
 
-    public static void setDefaults(PVector defaultSize, color defaultColor, color hoverColor, color activeColor,
-            color strokeColor, int textSize, color textColor) {
-        DEFAULT_SIZE = defaultSize;
-        DEFAULT_COLOR = defaultColor;
-        HOVER_COLOR = hoverColor;
-        ACTIVE_COLOR = activeColor;
-        STROKE_COLOR = strokeColor;
-        TEXT_SIZE = textSize;
-        TEXT_COLOR = textColor;
-
-        defaultButton = new Button(PVector.zero(), defaultSize, defaultColor, hoverColor, activeColor, strokeColor, "", textSize, textColor);
+    public static Button getDefaults() {
+        return defaultButton;
     }
 
     public Button setCornerRadius(double radius) {
@@ -166,7 +120,7 @@ public class Button extends Interactable {
     }
 
     public void mousePressed() {
-        if (hover() && interactive && active)
+        if (interactive && active && mouseButton == LEFT && hover())
             onClick();
     }
 
@@ -190,13 +144,13 @@ public class Button extends Interactable {
             }
         }
         currentColor = lerpColor(currentColor, targetColor, Animator.colorLerpAmount);
-        fill(currentColor);
+        fill(currentColor, currentColor.a * (alpha / 255.0f));
 
         if (!interactive)
-            fill(defaultColor);
+            fill(defaultColor, defaultColor.a * (alpha / 255.0f));
 
-        stroke(strokeColor);
-        strokeWeight(2);
+        stroke(strokeColor, strokeColor.a * (alpha / 255.0f));
+        strokeWeight(strokeWeight);
         rectMode(CENTER);
         rect(pos, size, cornerRadius);
 
@@ -204,7 +158,7 @@ public class Button extends Interactable {
     }
 
     public void drawText() {
-        fill(textColor);
+        fill(textColor, textColor.a * (alpha / 255.0f));
         textSize(textSize);
         textAlign(textAlignment);
 
@@ -218,5 +172,4 @@ public class Button extends Interactable {
 
         text(text, textPos);
     }
-
 }

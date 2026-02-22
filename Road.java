@@ -16,7 +16,7 @@ public class Road extends PComponent implements EventIgnorer {
     /**
      * The first index in the movements array where the given movement starts
      */
-    int indexStraight, indexRight, indexBikes;
+    int indexStraight, indexRight, indexBikes, indexPeds;
 
     Road left, straight, right;
 
@@ -25,17 +25,21 @@ public class Road extends PComponent implements EventIgnorer {
      * amount
      */
     float rotationAngle;
+    Origin origin;
 
     float x;
 
-    public Road(float angle) {
+    public Road(float angle, Origin origin) {
         rotationAngle = angle;
 
         indexStraight = -1;
         indexRight = -1;
         indexBikes = -1;
+        indexPeds = -1;
 
         x = width / 2 + Sketch.centerMedian / 2;
+
+        this.origin = origin;
     }
 
     public Road addMovements(MovementType... types) {
@@ -56,6 +60,8 @@ public class Road extends PComponent implements EventIgnorer {
             else if ((types[i] == MovementType.BIKE_STRAIGHT || types[i] == MovementType.BIKE_TEGELIJK)
                     && indexBikes == -1)
                 indexBikes = i;
+            else if (types[i] == MovementType.PEDESTRIAN && indexPeds == -1)
+                indexPeds = i;
         }
 
         return this;
@@ -90,6 +96,7 @@ public class Road extends PComponent implements EventIgnorer {
                                                // turning bikes are on the left
             else if (type == MovementType.BIKE_STRAIGHT)
                 x += Sketch.laneWidthBike;
+            // Don't increment for pedestrians
         }
     }
 
@@ -127,37 +134,52 @@ public class Road extends PComponent implements EventIgnorer {
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
                 case PEDESTRIAN:
-                    // TODO: implement peds
+                    finalX = this.movementStartPointsX[i];
+                    if (i == indexPeds)
+                        finalY = height / 2
+                                + abs(width / 2 - left.movementStartPointsX[left.indexStraight]
+                                        + Sketch.laneWidthCar / 2);
+                    else
+                        finalY = height / 2
+                                - abs(width / 2 - right.movementStartPointsX[right.indexRight]
+                                        - Sketch.laneWidthCar / 2);
+                    movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
             }
         }
     }
 
     public void createMovements(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsCars,
-            ArrayList<Movement> movementsBikes) {
+            ArrayList<Movement> movementsBikes, ArrayList<Movement> movementsPedestrians) {
         float stopLineCars = height / 2
                 + abs((width / 2 - (left.movementStartPointsX[left.movementTypes.length - 1] + Sketch.laneWidthBike)));
         float stopLineBikes = height / 2
                 + abs((width / 2 - (left.movementStartPointsX[left.indexRight - 1] + Sketch.laneWidthCar)));
+
+        float stopLinePeds1 = height / 2 + abs(width / 2 - left.movementStartPointsX[left.indexRight - 1])
+                + Sketch.laneWidthCar / 2;
+        float stopLinePeds2 = height / 2 - abs(width / 2 - right.movementStartPointsX[0]) + Sketch.laneWidthCar / 2;
+
         for (int i = 0; i < movementTypes.length; i++) {
             switch (movementTypes[i]) {
                 case CAR_LEFT:
-                    createCarLeft(movementsAll, movementsCars, i, stopLineCars);
+                    createCarLeft(movementsAll, movementsCars, i, stopLineCars, origin, Direction.LEFT);
                     break;
                 case CAR_RIGHT:
-                    createCarRight(movementsAll, movementsCars, i, stopLineCars);
+                    createCarRight(movementsAll, movementsCars, i, stopLineCars, origin, Direction.RIGHT);
                     break;
                 case CAR_STRAIGHT:
-                    createCarStraight(movementsAll, movementsCars, i, stopLineCars);
+                    createCarStraight(movementsAll, movementsCars, i, stopLineCars, origin, Direction.STRAIGHT);
                     break;
                 case BIKE_STRAIGHT:
-                    createBikeStraight(movementsAll, movementsBikes, i, stopLineBikes);
+                    createBikeStraight(movementsAll, movementsBikes, i, stopLineBikes, origin, Direction.STRAIGHT);
                     break;
                 case BIKE_TEGELIJK:
-                    createBikeTegelijk(movementsAll, movementsBikes, i, stopLineBikes);
+                    createBikeTegelijk(movementsAll, movementsBikes, i, stopLineBikes, origin, Direction.TEGELIJK);
                     break;
                 case PEDESTRIAN:
-                    createPedestrian(movementsAll, i, stopLineBikes);
+                    createPedestrian(movementsAll, movementsPedestrians, i, stopLinePeds1, stopLinePeds2, origin,
+                            Direction.STRAIGHT);
                     break;
             }
         }
@@ -174,8 +196,9 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     private void createCarLeft(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
-            float stopLine) {
-        Movement movement = new Movement(movementsAll, MovementType.CAR_LEFT, Sketch.greenTime, Sketch.yellowCar,
+            float stopLine, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.CAR_LEFT, origin, direction, Sketch.greenTime,
+                Sketch.yellowCar,
                 Sketch.speedCarTurn, Sketch.laneWidthCar, Sketch.accelerationCar, Settings.PATH_CAR);
 
         float x = movementStartPointsX[index];
@@ -201,8 +224,10 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     private void createCarStraight(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
-            float stopLine) {
-        Movement movement = new Movement(movementsAll, MovementType.CAR_STRAIGHT, Sketch.greenTime, Sketch.yellowCar,
+            float stopLine, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.CAR_STRAIGHT, origin, direction,
+                Sketch.greenTime,
+                Sketch.yellowCar,
                 Sketch.speedCar, Sketch.laneWidthCar, Sketch.accelerationCar, Settings.PATH_CAR);
 
         float x = movementStartPointsX[index];
@@ -219,8 +244,9 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     private void createCarRight(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
-            float stopLine) {
-        Movement movement = new Movement(movementsAll, MovementType.CAR_RIGHT, Sketch.greenTime, Sketch.yellowCar,
+            float stopLine, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.CAR_RIGHT, origin, direction,
+                Sketch.greenTime, Sketch.yellowCar,
                 Sketch.speedCarTurn, Sketch.laneWidthCar, Sketch.accelerationCar, Settings.PATH_CAR);
 
         float x = movementStartPointsX[index];
@@ -246,8 +272,10 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     private void createBikeStraight(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
-            float stopLine) {
-        Movement movement = new Movement(movementsAll, MovementType.BIKE_STRAIGHT, Sketch.greenTime, Sketch.yellowBike,
+            float stopLine, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.BIKE_STRAIGHT, origin, direction,
+                Sketch.greenTime,
+                Sketch.yellowBike,
                 Sketch.speedBike, Sketch.laneWidthBike, Sketch.accelerationBike, Settings.PATH_BIKE);
 
         float x = movementStartPointsX[index];
@@ -264,8 +292,10 @@ public class Road extends PComponent implements EventIgnorer {
     }
 
     private void createBikeTegelijk(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
-            float stopLine) {
-        Movement movement = new Movement(movementsAll, MovementType.BIKE_TEGELIJK, Sketch.greenTime, Sketch.yellowBike,
+            float stopLine, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.BIKE_TEGELIJK, origin, direction,
+                Sketch.greenTime,
+                Sketch.yellowBike,
                 Sketch.speedBike, Sketch.laneWidthBike, Sketch.accelerationBike, Settings.PATH_BIKE);
 
         float x = movementStartPointsX[index];
@@ -289,8 +319,50 @@ public class Road extends PComponent implements EventIgnorer {
         movementsToAdd.add(movement);
     }
 
-    private void createPedestrian(ArrayList<Movement> movementsAll, int index, float stopLine) {
-        // TODO: create pedestrian
+    private void createPedestrian(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsToAdd, int index,
+            float stopLine1, float stopLine2, Origin origin, Direction direction) {
+        Movement movement = new Movement(this, movementsAll, MovementType.PEDESTRIAN, origin, direction,
+                Sketch.greenTime,
+                Sketch.yellowWalk,
+                Sketch.speedWalk, Sketch.laneWidthPed, Sketch.speedWalk, Settings.PATH_PED);
+
+        float x = movementStartPointsX[index];
+        boolean first = index == indexPeds;
+
+        // Bottom
+        float y1 = height;
+        // First stop line
+        float y2 = stopLine1;
+        // Start of median
+        float y3 = movementEndpoints[indexPeds].y;
+        // Second stop line (end of median)
+        float y4 = stopLine2;
+        // End of intersection
+        float y5 = movementEndpoints[indexPeds + 1].y;
+
+        // Intro
+        float startY = first ? y1 : y3;
+        float endY = first ? y2 : y4;
+        int n = first ? 70 : 15;
+        for (int i = 0; i < n; i++) {
+            movement.addIntroNode(x, map(i, 0, n, startY, endY));
+        }
+
+        // Intersection
+        startY = first ? y2 : y4;
+        endY = first ? y3 : y5;
+        n = first ? 20 : 30;
+        for (int i = 0; i <= n; i++) {
+            movement.addIntersectionNode(x, map(i, 0, n, startY, endY));
+        }
+
+        startY = endY;
+        endY = first ? startY : 0;
+        n = first ? 1 : 70;
+        generateStraightExits(movement, n, x, startY, x, endY);
+
+        movements.get(MovementType.PEDESTRIAN).add(movement);
+        movementsToAdd.add(movement);
     }
 
     private void generateStraightIntros(Movement movement, int n, float x, float finalY) {

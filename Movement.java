@@ -3,9 +3,12 @@ import java.util.*;
 
 class Movement extends PComponent implements EventIgnorer {
 
+    Road road;
     ArrayList<Movement> movements;
     MovementType type;
     int id;
+    Origin origin;
+    Direction direction;
 
     int greenTimeDefault;
     int yellowTime;
@@ -45,6 +48,8 @@ class Movement extends PComponent implements EventIgnorer {
     color drawColor;
     color prevTargetColor = null;
     float pathHighlightAlpha = 0;
+    boolean highlight = false;
+    color highlightColor = Settings.PATH_HIGHLIGHT.copy().setAlpha(0);
 
     Phase phase = null;
     boolean changingGreen = false;
@@ -55,12 +60,16 @@ class Movement extends PComponent implements EventIgnorer {
      */
     int redStartTime = -1;
 
-    public Movement(ArrayList<Movement> movements, MovementType type, int greenTime, int yellowTime,
+    public Movement(Road road, ArrayList<Movement> movements, MovementType type, Origin origin, Direction direction,
+            int greenTime, int yellowTime,
             float speed,
             int laneWidth, float acceleration,
             color pathColor) {
+        this.road = road;
         this.movements = movements;
         this.type = type;
+        this.origin = origin;
+        this.direction = direction;
 
         greenTimeDefault = greenTime;
         this.yellowTime = yellowTime;
@@ -103,20 +112,27 @@ class Movement extends PComponent implements EventIgnorer {
         // on (and before the intersection), then we want to be green
         // When the first intersection node is added, we will calculate this as no more
         // intro nodes will be added.
-        if (pathIntersection.size() == 0) {
-            sensorIndex = pathIntro.size() - 1;
-            float dist = 0;
-            while ((dist / speed) < greenTimeDefault) {
-                dist += pathIntro.get(sensorIndex).dist(pathIntro.get(sensorIndex - 1));
-                sensorIndex--;
-                if (sensorIndex == 0) {
-                    println("WARNING: It takes longer than the green time to get to the intersection! Using the first node by default.");
-                    break;
+        if (type == MovementType.PEDESTRIAN) {
+            // Not the very last one because you reach out for the button and to make the
+            // second stage work better
+            sensorIndex = pathIntro.size() - 3;
+        } else {
+            if (pathIntersection.size() == 0) {
+                sensorIndex = pathIntro.size() - 1;
+                float dist = 0;
+                while ((dist / speed) < greenTimeDefault) {
+                    dist += pathIntro.get(sensorIndex).dist(pathIntro.get(sensorIndex - 1));
+                    sensorIndex--;
+                    if (sensorIndex == 0) {
+                        println("WARNING: It takes longer than the green time to get to the intersection! Using the first node by default.");
+                        break;
+                    }
                 }
+                sensorIndex += 1;
             }
-            sensorIndex += 1;
         }
 
+        // Add the node
         pathIntersection.add(new PVector(x, y));
         if (pathIntersection.size() > 1) {
             pathIntersectionDistance += (pathIntersection.get(pathIntersection.size() - 1)
@@ -249,6 +265,9 @@ class Movement extends PComponent implements EventIgnorer {
     public int begin(Phase phase, Phase outboundPhase) {
         this.phase = phase;
         int changeTime = frameCount;
+
+        if (!waitingTraffic())
+            return changeTime;
 
         if (outboundPhase == null) {
             // 0 clearance time
@@ -384,6 +403,34 @@ class Movement extends PComponent implements EventIgnorer {
         if (wantsGreen()) {
             signal = Signal.GREEN;
             greenStartTime = frameCount;
+
+            // Chain the 2 pedestrian signals together
+            if (type == MovementType.PEDESTRIAN) {
+                if (road.movements.get(MovementType.PEDESTRIAN).get(0) != this)
+                    return;
+
+                Movement ped2 = road.movements.get(MovementType.PEDESTRIAN).get(1);
+                for (Integer singalIndex : ped2.signalTimeline.keySet()) {
+                    if (ped2.signalTimeline.get(singalIndex) == Signal.GREEN)
+                        return;
+                }
+                if (!ped2.changingGreen && ped2.signal == Signal.RED && !ped2.changingRed) {
+                    // Calculate time from the first stop line to the second stop line
+                    float dist = ped2.pathIntersection.get(0).dist(pathIntersection.get(0));
+                    ped2.signalTimeline.put(round(dist / speed), Signal.GREEN);
+                    ped2.changingGreen = true;
+
+                    if (phase != null) {
+                        int thisGreenTime = frameCount + round(dist / speed) - phase.phaseStartTime;
+                        thisGreenTime += 1 + Sketch.greenTime;
+                        if (thisGreenTime > phase.minimumRealizedGreenTime) {
+                            phase.minimumRealizedGreenTime = thisGreenTime;
+                            phase.maximumRealizedGreenTime = max(phase.maximumRealizedGreenTime,
+                                    phase.minimumRealizedGreenTime);
+                        }
+                    }
+                }
+            }
         }
 
         changingGreen = false;
@@ -581,6 +628,7 @@ class Movement extends PComponent implements EventIgnorer {
 
     public void draw() {
         noStroke();
+
         color targetColor = null;
         if (Settings.HIGHLIGHT_SIGNALS) {
             switch (signal) {
@@ -597,9 +645,21 @@ class Movement extends PComponent implements EventIgnorer {
         }
         if (targetColor == prevTargetColor)
             drawColor = lerpColor(drawColor, targetColor, 0.25);
-        fill(drawColor);
+
+        if (type == MovementType.PEDESTRIAN)
+            fill(pathColor);
+        else
+            fill(drawColor);
         prevTargetColor = targetColor;
-        drawPath();
+        if (type == MovementType.PEDESTRIAN) {
+            drawPath(pathIntro);
+            drawPath(pathExit);
+        } else {
+            drawPath(path);
+        }
+
+        if (type == MovementType.PEDESTRIAN)
+            drawZebraCrossing();
 
         // Draw the normaly realized paths
         if (phase != null && phase.activePhase)
@@ -612,7 +672,12 @@ class Movement extends PComponent implements EventIgnorer {
         if (pathHighlightAlpha > 4) {
             noStroke();
             fill(255, pathHighlightAlpha - 4);
-            drawPath();
+            if (type == MovementType.PEDESTRIAN) {
+                drawPath(pathIntro);
+                drawPath(pathExit);
+            } else {
+                drawPath(path);
+            }
         }
 
         drawSensor();
@@ -634,27 +699,48 @@ class Movement extends PComponent implements EventIgnorer {
         // }
     }
 
-    public void drawPath() {
+    public void drawHighlight() {
+        if (highlight) {
+            highlightColor = lerpColor(highlightColor, Settings.PATH_HIGHLIGHT, 0.25);
+            if (highlightColor.a >= 253)
+                highlightColor.a = 255;
+        } else if (!highlight && highlightColor.a > 0) {
+            highlightColor = lerpColor(highlightColor, Settings.PATH_HIGHLIGHT.copy().setAlpha(0), 0.25);
+            if (highlightColor.a <= 2)
+                highlightColor.a = 0;
+        }
+
+        if (highlightColor.a == 0)
+            return;
+
+        stroke(highlightColor);
+        strokeWeight(4);
+        noFill();
+        drawPath(path);
+        noStroke();
+    }
+
+    public void drawPath(ArrayList<PVector> pathToTrace) {
         beginShape();
 
         // There
-        for (int i = 0; i < path.size() - 1; i++) {
-            PVector node = path.get(i);
-            PVector next = path.get(i + 1);
+        for (int i = 0; i < pathToTrace.size() - 1; i++) {
+            PVector node = pathToTrace.get(i);
+            PVector next = pathToTrace.get(i + 1);
 
             PVector offset = PVector.sub(next, node).normalize().rotate(-PI / 2).mult(laneWidth / 2);
             vertex(PVector.add(node, offset));
 
             // Finish out this line by adding the same offset to the final node. This is
             // okay because the exit paths are always straight
-            if (i == path.size() - 2) {
+            if (i == pathToTrace.size() - 2) {
                 vertex(PVector.add(next, offset));
             }
         }
         // Back
-        for (int i = path.size() - 1; i > 0; i--) {
-            PVector node = path.get(i);
-            PVector next = path.get(i - 1);
+        for (int i = pathToTrace.size() - 1; i > 0; i--) {
+            PVector node = pathToTrace.get(i);
+            PVector next = pathToTrace.get(i - 1);
 
             PVector offset = PVector.sub(next, node).normalize().rotate(-PI / 2).mult(laneWidth / 2);
             vertex(PVector.add(node, offset));
@@ -668,7 +754,63 @@ class Movement extends PComponent implements EventIgnorer {
         endShape();
     }
 
-    public void drawTrafficLightAndStopline() {
+    private void drawZebraCrossing() {
+        if (signal != Signal.RED) {
+            fill(drawColor);
+            drawPath(pathIntersection);
+        }
+
+        fill(255, 100);
+        float whiteWidth = Sketch.laneWidthCar / 3; // 2 white areas per car lane
+        float blackWidth = Sketch.laneWidthCar / 9; // We have 3 black areas to fill a space of width / 3
+        if (getRotation() == 0) {
+            float x = pathIntro.get(0).x;
+            float y = pathIntersection.get(0).y;
+
+            y -= whiteWidth + blackWidth;
+            y += whiteWidth / 2;
+            while (y > pathExit.get(0).y) {
+                rect(x, y, laneWidth, whiteWidth);
+
+                y -= whiteWidth + blackWidth;
+            }
+        } else if (getRotation() == PI) {
+            float x = pathIntro.get(0).x;
+            float y = pathIntersection.get(0).y;
+
+            y += whiteWidth + blackWidth;
+            y -= whiteWidth / 2;
+            while (y < pathExit.get(0).y) {
+                rect(x, y, laneWidth, whiteWidth);
+
+                y += whiteWidth + blackWidth;
+            }
+        } else if (getRotation() == PI / 2) {
+            float x = pathIntersection.get(0).x;
+            float y = pathIntro.get(0).y;
+
+            x += whiteWidth + blackWidth;
+            x -= whiteWidth / 2;
+            while (x < pathExit.get(0).x) {
+                rect(x, y, whiteWidth, laneWidth);
+
+                x += whiteWidth + blackWidth;
+            }
+        } else if (getRotation() == -PI / 2) {
+            float x = pathIntersection.get(0).x;
+            float y = pathIntro.get(0).y;
+
+            x -= whiteWidth + blackWidth;
+            x += whiteWidth / 2;
+            while (x > pathExit.get(0).x) {
+                rect(x, y, whiteWidth, laneWidth);
+
+                x -= whiteWidth + blackWidth;
+            }
+        }
+    }
+
+    private float getRotation() {
         PVector diff = PVector.sub(pathIntro.get(1), pathIntro.get(0));
         float dir = 0;
         // From:
@@ -681,10 +823,15 @@ class Movement extends PComponent implements EventIgnorer {
         else if (diff.y < 0) // bottom
             dir = 0;
 
+        return dir;
+    }
+
+    public void drawTrafficLightAndStoplineAndArrows() {
         float signalRadius = laneWidth / 2.2f;
         float w = signalRadius * 0.3f;
         float h = signalRadius * 2;
         float startY = -h;
+        float dir = getRotation();
 
         push();
         PVector translation = pathIntersection.get(0).copy();
@@ -726,6 +873,10 @@ class Movement extends PComponent implements EventIgnorer {
         }
 
         // Stopline
+        if (type == MovementType.PEDESTRIAN) {
+            pop();
+            return;
+        }
         noStroke();
         fill(220, 150);
         rectMode(CENTER);
@@ -739,6 +890,69 @@ class Movement extends PComponent implements EventIgnorer {
         translate(PVector.fromAngle(dir).rotate(PI / 2).mult(-h * 1.3));
         rotate(dir);
         rect(PVector.zero(), offset);
+
+        pop();
+
+        // Arrow
+        if (!type.toString().contains("CAR"))
+            return;
+
+        push();
+        translation = pathIntro.get(pathIntro.size() * 2 / 3).copy();
+        translation.add(PVector.fromAngle(dir).rotate(PI / 2));
+        translate(translation);
+        rotate(dir);
+
+        noStroke();
+        fill(255, 100);
+        switch (direction) {
+            case STRAIGHT:
+                float triH = laneWidth / 2;
+                triangle(0, 0, -laneWidth / 6, triH, laneWidth / 6, triH);
+                float rectH = laneWidth * 0.75f;
+                rect(0, triH + rectH / 2, laneWidth / 8, rectH);
+                break;
+            case RIGHT:
+                beginShape();
+                float startW = -laneWidth / 2f;
+                float startH = laneWidth / 2f;
+                float xOffset = laneWidth / 2.8f;
+
+                vertex(-(startW + xOffset), 0);
+                vertex(-(startW * 1.3f + xOffset), startH / 2f);
+                vertex(-(startW + xOffset), startH);
+                vertex(-(startW + xOffset), startH * 0.75f);
+                vertex(-(startW / 2f + xOffset), startH * 0.75f + (-startW / 2f));
+                vertex(-(startW / 2f + xOffset), laneWidth / 2f + laneWidth * 0.75f);
+
+                float finalX = startW / 2f + xOffset + laneWidth / 14f;
+                vertex(-finalX, laneWidth / 2f + laneWidth * 0.75f);
+                vertex(-finalX, startH * 0.25f + (-startW / 2f));
+
+                vertex(-(startW + xOffset), startH * 0.25f);
+
+                endShape(CLOSE);
+                break;
+            case LEFT:
+                beginShape();
+                startW = -laneWidth / 2f;
+                startH = laneWidth / 2;
+                xOffset = laneWidth / 2.8f;
+                vertex(startW + xOffset, 0);
+                vertex(startW * 1.3 + xOffset, startH / 2);
+                vertex(startW + xOffset, startH);
+                vertex(startW + xOffset, startH * 0.75);
+                vertex(startW / 2 + xOffset, startH * 0.75 + (-startW / 2));
+                vertex(startW / 2 + xOffset, laneWidth / 2 + laneWidth * 0.75);
+                finalX = startW / 2 + xOffset + laneWidth / 14;
+                vertex(finalX, laneWidth / 2 + laneWidth * 0.75);
+                vertex(finalX, startH * 0.25 + (-startW / 2));
+                vertex(startW + xOffset, startH * 0.25);
+                endShape(CLOSE);
+                break;
+            default:
+                break;
+        }
 
         pop();
     }
@@ -798,6 +1012,9 @@ class Movement extends PComponent implements EventIgnorer {
     }
 
     public void drawSensor() {
+        if (type == MovementType.PEDESTRIAN)
+            return;
+
         noFill();
         stroke(5, 100);
         strokeWeight(2);
@@ -815,4 +1032,26 @@ class Movement extends PComponent implements EventIgnorer {
         println();
     }
 
+    public boolean hover() {
+        switch (origin) {
+            case NORTH:
+                if (mouseY > pathIntersection.get(0).y)
+                    return false;
+                return mouseX > path.get(0).x - laneWidth / 2 && mouseX < path.get(0).x + laneWidth / 2;
+            case SOUTH:
+                if (mouseY < pathIntersection.get(0).y)
+                    return false;
+                return mouseX > path.get(0).x - laneWidth / 2 && mouseX < path.get(0).x + laneWidth / 2;
+            case EAST:
+                if (mouseX < pathIntersection.get(0).x)
+                    return false;
+                return mouseY > path.get(0).y - laneWidth / 2 && mouseY < path.get(0).y + laneWidth / 2;
+            case WEST:
+                if (mouseX > pathIntersection.get(0).x)
+                    return false;
+                return mouseY > path.get(0).y - laneWidth / 2 && mouseY < path.get(0).y + laneWidth / 2;
+            default:
+                return false;
+        }
+    }
 }

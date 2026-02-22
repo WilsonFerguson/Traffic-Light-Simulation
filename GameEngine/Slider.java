@@ -7,14 +7,14 @@ public class Slider extends Interactable {
     public float value = 0;
     public float min = 0;
     public float max = 1;
-    public float step = 0.01f;
+    public float step = 0.2f;
 
     private boolean selected = false;
 
     private PVector knobPosition;
 
-    private color filledBackgroundColor;
-    private color emptyBackgroundColor;
+    public color filledBackgroundColor;
+    public color emptyBackgroundColor;
 
     Runnable onValueChange;
 
@@ -27,14 +27,14 @@ public class Slider extends Interactable {
     public static color FILLED_BACKGROUND_COLOR = new color(0, 230, 0);
     public static color EMPTY_BACKGROUND_COLOR = new color(200);
 
-    public Slider(PVector pos, PVector size, float min, float max, float step, color defaultColor, color hoverColor,
+    public Slider(PVector pos, PVector size, double min, double max, double step, color defaultColor, color hoverColor,
             color activeColor, color strokeColor, color emptyBackgroundColor, color filledBackgroundColor) {
         this.pos = pos;
         this.size = size;
 
-        this.min = min;
-        this.max = max;
-        this.step = step;
+        this.min = (float) min;
+        this.max = (float) max;
+        this.step = (float) step;
 
         this.defaultColor = defaultColor;
         this.hoverColor = hoverColor;
@@ -72,28 +72,46 @@ public class Slider extends Interactable {
      * Makes a slider with a range of 0 to 1, and a step of 0.01.
      */
     public Slider(PVector pos, PVector size) {
-        this(pos, size, 0, 1, 0.01f, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(), ACTIVE_COLOR.copy(), STROKE_COLOR.copy(),
+        this(pos, size, 0, 1, 0.2, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(), ACTIVE_COLOR.copy(), STROKE_COLOR.copy(),
                 EMPTY_BACKGROUND_COLOR.copy(),
                 FILLED_BACKGROUND_COLOR.copy());
     }
 
     public Slider(double x, double y, double w, double h) {
-        this(new PVector(x, y), new PVector(w, h), 0, 1, 0.01f, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
+        this(new PVector(x, y), new PVector(w, h), 0, 1, 0.2, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
                 ACTIVE_COLOR.copy(), STROKE_COLOR.copy(),
                 EMPTY_BACKGROUND_COLOR.copy(), FILLED_BACKGROUND_COLOR.copy());
     }
 
     public Slider(PVector pos) {
-        this(pos, DEFAULT_SIZE.copy(), 0, 1, 0.01f, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(), ACTIVE_COLOR.copy(),
+        this(pos, DEFAULT_SIZE.copy(), 0, 1, 0.2, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(), ACTIVE_COLOR.copy(),
                 STROKE_COLOR.copy(),
                 EMPTY_BACKGROUND_COLOR.copy(),
                 FILLED_BACKGROUND_COLOR.copy());
     }
 
     public Slider(double x, double y) {
-        this(new PVector(x, y), DEFAULT_SIZE.copy(), 0, 1, 0.01f, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
+        this(new PVector(x, y), DEFAULT_SIZE.copy(), 0, 1, 0.2, DEFAULT_COLOR.copy(), HOVER_COLOR.copy(),
                 ACTIVE_COLOR.copy(), STROKE_COLOR.copy(),
                 EMPTY_BACKGROUND_COLOR.copy(), FILLED_BACKGROUND_COLOR.copy());
+    }
+
+    public Slider copy() {
+        Slider copy = new Slider(pos.copy(), size.copy(), min, max, step, defaultColor.copy(), hoverColor.copy(),
+                activeColor.copy(), strokeColor.copy(), emptyBackgroundColor.copy(), filledBackgroundColor.copy());
+        copy.onValueChange(onValueChange);
+        copy.onHover(onHover);
+        copy.onHoverExit(onHoverExit);
+        copy.setCornerRadius(cornerRadius);
+        copy.setStrokeWeight(strokeWeight);
+        copy.setInteractive(interactive);
+        copy.setActive(active);
+        copy.setTextAlignment(textAlignment);
+        copy.setAlpha(alpha);
+        copy.setValue(value);
+        copy.knobPosition = knobPosition.copy();
+
+        return copy;
     }
 
     public static void setDefaults(PVector defaultSize, color defaultColor, color hoverColor, color activeColor,
@@ -127,26 +145,36 @@ public class Slider extends Interactable {
         }
     }
 
-    public Slider setValue(float value) {
-        this.value = value;
+    public Slider setValue(double value) {
+        this.value = (float) value;
         knobPosition = getTargetKnobPosition();
         onValueChange();
         return this;
     }
 
-    public Slider setMin(float min) {
-        this.min = min;
+    public Slider setMin(double min) {
+        this.min = (float) min;
         return this;
     }
 
-    public Slider setMax(float max) {
-        this.max = max;
+    public Slider setMax(double max) {
+        this.max = (float) max;
         return this;
     }
 
-    public Slider setStep(float step) {
-        this.step = step;
+    public Slider setStep(double step) {
+        this.step = (float) step;
         return this;
+    }
+
+    public Slider setPos(PVector pos) {
+        this.pos = pos;
+        knobPosition = getTargetKnobPosition();
+        return this;
+    }
+
+    public Slider setPos(double x, double y) {
+        return setPos(new PVector(x, y));
     }
 
     public float getValue() {
@@ -165,13 +193,24 @@ public class Slider extends Interactable {
         return step;
     }
 
+    /**
+     * Returns true only if the knob is being hovered over.
+     */
     public boolean hover() {
         float distSq = distSq(knobPosition, mouse);
         return distSq < size.y * size.y / 4;
     }
 
+    /**
+     * Returns true if the knob or body is being hovered over.
+     */
+    public boolean hoverBody() {
+        return (mouseX >= pos.x - size.x / 2 && mouseX <= pos.x + size.x / 2 &&
+                mouseY >= pos.y - size.y / 2 && mouseY <= pos.y + size.y / 2);
+    }
+
     public void mousePressed() {
-        if (hover() && interactive && active) {
+        if (interactive && active && mouseButton == LEFT && hover()) {
             selected = true;
         }
     }
@@ -215,13 +254,14 @@ public class Slider extends Interactable {
 
         // Background
         rectMode(CENTER);
-        fill(emptyBackgroundColor);
-        stroke(strokeColor);
+        fill(emptyBackgroundColor, emptyBackgroundColor.a * (alpha / 255.0f));
+        stroke(strokeColor, strokeColor.a * (alpha / 255.0f));
+        strokeWeight(strokeWeight);
         rect(pos.x, pos.y, size.x, size.y, size.y);
 
         // Filled background
         rectMode(CORNER);
-        fill(filledBackgroundColor);
+        fill(filledBackgroundColor, filledBackgroundColor.a * (alpha / 255.0f));
         noStroke();
         rect(pos.x - size.x / 2, pos.y - size.y / 2, knobPosition.x - pos.x + size.x / 2 + size.y / 2, size.y, size.y);
 
@@ -229,18 +269,17 @@ public class Slider extends Interactable {
         color targetColor = defaultColor;
         if (selected)
             targetColor = activeColor;
-        else if (isHovered)
-            if (mousePressed)
+        else if (isHovered && interactive)
+            if (mousePressed && mouseButton == LEFT)
                 targetColor = activeColor;
             else
                 targetColor = hoverColor;
 
         currentColor = lerpColor(currentColor, targetColor, Animator.colorLerpAmount);
 
-        fill(currentColor);
+        fill(currentColor, currentColor.a * (alpha / 255.0f));
         noStroke();
         ellipseMode(CENTER);
         circle(knobPosition.x, knobPosition.y, size.y);
     }
-
 }

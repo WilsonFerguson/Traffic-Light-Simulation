@@ -116,7 +116,12 @@ class Person extends PComponent implements EventIgnorer {
         rotate(dir.heading());
         float w = movement.laneWidth / 1.4f;
         float h = movement.laneWidth / 3;
-        rect(-w, 0, w, h);
+        if (movement.type.toString().contains("CAR")) {
+            rect(-w, 0, w, h);
+        } else {
+            ellipseMode(CENTER);
+            circle(-h, 0, h);
+        }
         pop();
     }
 

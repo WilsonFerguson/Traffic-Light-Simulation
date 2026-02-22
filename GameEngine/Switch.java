@@ -100,6 +100,25 @@ public class Switch extends Interactable {
                 UNCHECKED_BACKGROUND_COLOR.copy(), CHECKED_BACKGROUND_COLOR.copy(), STROKE_COLOR.copy());
     }
 
+    public Switch copy() {
+        Switch copy = new Switch(pos.copy(), size.copy(), defaultColor.copy(), hoverColor.copy(), activeColor.copy(),
+                unCheckedBackgroundColor.copy(), checkedBackgroundColor.copy(), strokeColor.copy());
+        copy.onToggle(onToggle);
+        copy.onHover(onHover);
+        copy.onHoverExit(onHoverExit);
+        copy.setCornerRadius(cornerRadius);
+        copy.setStrokeWeight(strokeWeight);
+        copy.setInteractive(interactive);
+        copy.setActive(active);
+        copy.setTextAlignment(textAlignment);
+        copy.setAlpha(alpha);
+        copy.setOn(on);
+        copy.currentBackgroundColor = currentBackgroundColor.copy();
+        copy.knobPosition = knobPosition.copy();
+
+        return copy;
+    }
+
     public static void setDefaults(PVector defaultSize, color defaultColor, color hoverColor, color activeColor,
             color unCheckedBackgroundColor, color checkedBackgroundColor, color strokeColor) {
         DEFAULT_SIZE = defaultSize;
@@ -111,12 +130,23 @@ public class Switch extends Interactable {
         STROKE_COLOR = strokeColor;
     }
 
+    /**
+     * Returns true only if the knob is being hovered over.
+     */
     public boolean hover() {
         return (distSq(mouseX, mouseY, knobPosition.x, knobPosition.y) < size.y * size.y / 4);
     }
 
+    /*
+     * Returns true if the knob or body is being hovered over.
+     */
+    public boolean hoverBody() {
+        return (mouseX >= pos.x - size.x / 2 && mouseX <= pos.x + size.x / 2 &&
+                mouseY >= pos.y - size.y / 2 && mouseY <= pos.y + size.y / 2);
+    }
+
     public void mousePressed() {
-        if (hover() && interactive && active) {
+        if (interactive && active && mouseButton == LEFT && hover()) {
             selected = true;
         }
     }
@@ -140,6 +170,16 @@ public class Switch extends Interactable {
     public Switch setOn(boolean on) {
         this.on = on;
         return this;
+    }
+
+    public Switch setPos(PVector pos) {
+        this.pos = pos;
+        snapKnobToTarget();
+        return this;
+    }
+
+    public Switch setPos(double x, double y) {
+        return setPos(new PVector(x, y));
     }
 
     public Switch onToggle(Runnable onToggle) {
@@ -189,26 +229,26 @@ public class Switch extends Interactable {
         }
 
         rectMode(CENTER);
-        fill(currentBackgroundColor);
-        stroke(strokeColor);
+        fill(currentBackgroundColor, currentBackgroundColor.a * (alpha / 255.0f));
+        stroke(strokeColor, strokeColor.a * (alpha / 255.0f));
+        strokeWeight(strokeWeight);
         rect(pos.x, pos.y, size.x, size.y, size.y);
 
         // Knob
         color targetColor = defaultColor;
         if (selected)
             targetColor = activeColor;
-        else if (isHovered)
-            if (mousePressed)
+        else if (isHovered && interactive)
+            if (mousePressed && mouseButton == LEFT)
                 targetColor = activeColor;
             else
                 targetColor = hoverColor;
 
         currentColor = lerpColor(currentColor, targetColor, Animator.colorLerpAmount);
 
-        fill(currentColor);
+        fill(currentColor, currentColor.a * (alpha / 255.0f));
         noStroke();
         ellipseMode(CENTER);
         circle(knobPosition.x, knobPosition.y, size.y * 0.95);
     }
-
 }
