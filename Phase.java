@@ -23,6 +23,12 @@ class Phase extends PComponent implements EventIgnorer {
         }
     }
 
+    public Phase(int maximumTypicalGreenTime, ArrayList<Movement> allMovements, ArrayList<Movement> phase) {
+        this.maximumTypicalGreenTime = maximumTypicalGreenTime;
+        movements = new ArrayList<Movement>();
+        movements = new ArrayList<Movement>(phase);
+    }
+
     public void addMovement(Movement movement) {
         movements.add(movement);
         defaultTime = max(defaultTime, movement.getTime(maximumTypicalGreenTime));

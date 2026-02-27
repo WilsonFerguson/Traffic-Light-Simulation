@@ -5,6 +5,7 @@ public interface PConstants {
     public final int CENTER = 0;
     public final int CORNER = 4;
     public final int LEFT = 1;
+    public final int MIDDLE = 2;
     public final int RIGHT = 3;
 
     // Shape modes

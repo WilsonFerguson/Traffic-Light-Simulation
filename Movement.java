@@ -13,6 +13,7 @@ class Movement extends PComponent implements EventIgnorer {
     int greenTimeDefault;
     int yellowTime;
     int exitTime;
+    int redWaitTime;
 
     /**
      * The signal will change at the given time in millis(), when we reach this time
@@ -61,7 +62,7 @@ class Movement extends PComponent implements EventIgnorer {
     int redStartTime = -1;
 
     public Movement(Road road, ArrayList<Movement> movements, MovementType type, Origin origin, Direction direction,
-            int greenTime, int yellowTime,
+            int greenTime, int yellowTime, int redWaitTime,
             float speed,
             int laneWidth, float acceleration,
             color pathColor) {
@@ -73,6 +74,7 @@ class Movement extends PComponent implements EventIgnorer {
 
         greenTimeDefault = greenTime;
         this.yellowTime = yellowTime;
+        this.redWaitTime = redWaitTime;
 
         signalTimeline = new HashMap<Integer, Signal>();
 
@@ -321,13 +323,21 @@ class Movement extends PComponent implements EventIgnorer {
         int timeUntilGreen = estimatedTimeUntilGreen();
         if (timeUntilGreen == -1 || timeUntilGreenCounter == -1) {
             timeUntilGreenCounter = timeUntilGreen;
-            if (timeUntilGreenCounter != -1)
-                timeUntilGreenCounterMax = timeUntilGreen;
+            timeUntilGreenCounterMax = timeUntilGreen;
         } else {
-            if (timeUntilGreen > timeUntilGreenCounter)
-                timeUntilGreenCounter = min(timeUntilGreenCounter + 8, timeUntilGreen);
-            else if (timeUntilGreen < timeUntilGreenCounter)
-                timeUntilGreenCounter = max(timeUntilGreenCounter - 8, timeUntilGreen);
+            // If there's been a big change in the time until green then:
+            // Change the max in such a way that the percentage stays the same but now the
+            // max is much lower
+            if (timeUntilGreen != 0 && abs(timeUntilGreen - timeUntilGreenCounter) / timeUntilGreen > 0.1) {
+                float multiplier = ((float) timeUntilGreenCounterMax) / timeUntilGreenCounter;
+                timeUntilGreenCounterMax = ceil(((float) timeUntilGreen) * multiplier);
+                timeUntilGreenCounter = timeUntilGreen;
+            } else {
+                if (timeUntilGreen > timeUntilGreenCounter)
+                    timeUntilGreenCounter = min(timeUntilGreenCounter + 6, timeUntilGreen);
+                else if (timeUntilGreen < timeUntilGreenCounter)
+                    timeUntilGreenCounter = max(timeUntilGreenCounter - 6, timeUntilGreen);
+            }
         }
 
         // If the special person exists, check if they are past the intersection. If so
@@ -853,8 +863,6 @@ class Movement extends PComponent implements EventIgnorer {
                 signalRadius);
 
         // Draw estimated time until green
-        float maxTimeUntilGreen = IntersectionManager.phases.get(0).maximumTypicalGreenTime * 3.5f + yellowTime
-                + exitTime;
         noStroke();
         rectMode(CORNER);
 
@@ -866,7 +874,7 @@ class Movement extends PComponent implements EventIgnorer {
             int n = 30;
             for (int i = 0; i <= n; i++) {
                 float y = map(i, n, 0, startY + w / 2, startY + signalRadius * 4 - w / 2);
-                if ((float) i / n > (float) timeUntilGreenCounter / maxTimeUntilGreen)
+                if ((float) i / n > (float) timeUntilGreenCounter / timeUntilGreenCounterMax)
                     break;
                 circle(-signalRadius - w / 2, y, w / 2);
             }

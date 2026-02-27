@@ -14,6 +14,11 @@ class IntersectionManager extends PComponent implements EventIgnorer {
         }
     }
 
+    public static void uploadPhases(ArrayList<Phase> newPhases) {
+        phases = newPhases;
+        currentPhaseIndex = 0;
+    }
+
     public static void start() {
         phases.get(currentPhaseIndex).begin(null);
         started = true;

@@ -245,6 +245,11 @@ public class Panel extends UIElement implements EventIgnorer {
         return setPos(new PVector(x, y));
     }
 
+    public Panel setElementHeightCounter(double elementHeightCounter) {
+        this.elementHeightCounter = (float) elementHeightCounter;
+        return this;
+    }
+
     public void draw() {
         if (!active)
             return;
