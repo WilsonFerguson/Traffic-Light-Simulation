@@ -390,7 +390,7 @@ class Movement extends PComponent implements EventIgnorer {
         if (signal == Signal.GREEN && !waitingTraffic() && frameCount - greenStartTime >= greenTimeDefault) {
             end();
         }
-        if (signal == Signal.RED && waitingTraffic()) {
+        if (signal == Signal.RED && frameCount > redStartTime + redWaitTime && waitingTraffic()) {
             // If tegelijk groen, don't allow bike splicing
             if (Sketch.tegelijkGroen && type == MovementType.BIKE_TEGELIJK || type == MovementType.BIKE_STRAIGHT) {
                 return;
@@ -534,7 +534,6 @@ class Movement extends PComponent implements EventIgnorer {
                     // So this signal is just green, so we have to force it off
                     int yellowStartTime = movement.greenStartTime + movement.greenTimeDefault;
 
-                    // movement.signalTimeline.put(yellowStartTime, Signal.YELLOW);
                     movementsToChangeYellow.put(movement, yellowStartTime);
 
                     int redStartTime = yellowStartTime + movement.yellowTime;
@@ -558,7 +557,14 @@ class Movement extends PComponent implements EventIgnorer {
                 for (Movement movement : movements) {
                     if (movement.changingGreen && clearanceTimes.containsKey(movement)) {
                         movement.changingGreen = false;
-                        movement.signalTimeline.clear();
+
+                        // movement.signalTimeline.clear();
+                        for (Integer time : movement.signalTimeline.keySet()) {
+                            if (movement.signalTimeline.get(time) == Signal.GREEN) {
+                                movement.signalTimeline.remove(time);
+                            }
+                        }
+
                     }
                 }
 

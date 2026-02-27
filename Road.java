@@ -136,11 +136,18 @@ public class Road extends PComponent implements EventIgnorer {
 
             switch (type) {
                 case CAR_LEFT:
-                    // If num straights of right road < numLefts then:
+                    // Principal idea: If num straights of right road < numLefts then:
                     // We allow one left turn to be below the left most straight. the others then
                     // just keep stacking upwards
-                    float finalX = width / 2 - abs(width / 2
-                            - (straight.movementStartPointsX[straight.movementTypes.length - 1] + Sketch.laneWidthCar));
+
+                    float finalX = 0;
+                    if (straight.movementTypes.length == 0) {
+                        finalX = width / 2 - abs(height / 2 - left.getStopLineCars());
+                    } else {
+                        finalX = width / 2 - abs(width / 2
+                                - (straight.movementStartPointsX[straight.movementTypes.length - 1]
+                                        + Sketch.laneWidthCar));
+                    }
 
                     float finalY = 0;
                     // Number of straight movements that the right road has
@@ -173,8 +180,12 @@ public class Road extends PComponent implements EventIgnorer {
                     break;
                 case CAR_STRAIGHT:
                     finalX = this.movementStartPointsX[i];
-                    finalY = height / 2 - abs((width / 2
-                            - (right.movementStartPointsX[right.movementTypes.length - 1] + Sketch.laneWidthCar)));
+                    if (right.movementTypes.length == 0) {
+                        finalY = height / 2 - abs(height / 2 - straight.getStopLineCars());
+                    } else {
+                        finalY = height / 2 - abs((width / 2
+                                - (right.movementStartPointsX[right.movementTypes.length - 1] + Sketch.laneWidthCar)));
+                    }
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
                 case CAR_RIGHT:
@@ -194,7 +205,15 @@ public class Road extends PComponent implements EventIgnorer {
                     } else {
                         // TODO: ov support
                     }
-                    finalY = height / 2 - abs((width / 2 - right.movementStartPointsX[rightLastCarIndex]));
+
+                    // If rightLastCarIndex is still -1, then no cars come from the right. So we
+                    // instead just set the end point to be at the median
+                    if (rightLastCarIndex == -1) {
+                        finalY = height / 2 + abs(width / 2 - getInitialX());
+                    } else {
+                        finalY = height / 2 - abs((width / 2 - right.movementStartPointsX[rightLastCarIndex]));
+                    }
+
                     movementEndpoints[i] = new PVector(finalX, finalY);
                     break;
                 case BIKE_TEGELIJK:
@@ -221,6 +240,9 @@ public class Road extends PComponent implements EventIgnorer {
                 continue;
 
             float finalX = this.movementStartPointsX[this.movementTypes.length - 1] + Sketch.laneWidthCar;
+            if (numBikes == 0 && numPeds == 0) {
+                finalX = width / 2 + abs(height / 2 - right.getStopLineCars());
+            }
 
             int currentRight = i - indexRight;
             float baseY = -height;
@@ -289,29 +311,59 @@ public class Road extends PComponent implements EventIgnorer {
                     fartherIndex = right.indexStraight + right.numStraights - 1;
                 } else if (right.numLefts != 0) {
                     fartherIndex = right.indexLeft + right.numLefts - 1;
+                    // TODO: OV support?
+                } else if (right.numBikes != 0) {
+                    fartherIndex = right.indexBikes;
+                } else if (right.numPeds != 0) {
+                    fartherIndex = right.indexPeds;
                 }
-                // TODO: OV support?
 
-                finalY = height / 2
-                        - abs(width / 2 - (right.movementStartPointsX[fartherIndex] + Sketch.laneWidthCar / 2));
+                if (fartherIndex != -1) {
+                    finalY = height / 2
+                            - abs(width / 2 - (right.movementStartPointsX[fartherIndex] + Sketch.laneWidthCar / 2));
+                } else {
+                    finalY = height / 2 - abs(width / 2 - getInitialX());
+                }
             }
             movementEndpoints[i] = new PVector(finalX, finalY);
         }
     }
 
+    public float getStopLineCars() {
+        float stopLineBase = 0;
+        switch (origin) {
+            case SOUTH:
+                stopLineBase = Sketch.stopLineBottomRight.y;
+                break;
+            case NORTH:
+                stopLineBase = height - Sketch.stopLineTopLeft.y;
+                break;
+            case EAST:
+                stopLineBase = Sketch.stopLineBottomRight.x;
+                break;
+            case WEST:
+                stopLineBase = width - Sketch.stopLineTopLeft.x;
+                break;
+        }
+
+        if (left.movementTypes.length == 0)
+            return stopLineBase;
+
+        float stopLine = height / 2
+                + abs(width / 2 - (left.movementStartPointsX[left.movementTypes.length - 1] + Sketch.laneWidthBike));
+
+        // Don't want the intersection to be too squashed so
+        if (stopLine < stopLineBase)
+            stopLine = stopLineBase;
+
+        return stopLine;
+    }
+
     public void createMovements(ArrayList<Movement> movementsAll, ArrayList<Movement> movementsCars,
             ArrayList<Movement> movementsBikes, ArrayList<Movement> movementsPedestrians) {
 
-        float stopLineCars = height / 2
-                + abs((width / 2 - (left.movementStartPointsX[left.movementTypes.length - 1] + Sketch.laneWidthBike)));
-        // Don't want the intersection to be too squashed so
-        if (abs(stopLineCars - height / 2) < abs(width / 2 - getInitialX()) * 3) {
-            stopLineCars = height / 2 + abs(width / 2 - getInitialX()) * 3;
-        }
+        float stopLineCars = getStopLineCars();
 
-        // float stopLineBikes = height / 2
-        // + abs((width / 2 - (left.movementStartPointsX[left.indexRight - 1] +
-        // Sketch.laneWidthCar)));
         float stopLineBikes = 0;
         float stopLinePeds1 = 0;
         if (left.numStraights != 0) {
@@ -350,7 +402,11 @@ public class Road extends PComponent implements EventIgnorer {
         if (stopLinePeds1 == 0)
             stopLinePeds1 = stopLineBikes;
 
-        float stopLinePeds2 = height / 2 - abs(width / 2 - right.movementStartPointsX[0]) + Sketch.laneWidthCar / 2;
+        // If no right movements, then arbitrary peds2 pos.
+        float stopLinePeds2 = height / 2 - abs(width / 2 - getInitialX());
+        if (right.movementTypes.length != 0) {
+            stopLinePeds2 = height / 2 - abs(width / 2 - right.movementStartPointsX[0]) + Sketch.laneWidthCar / 2;
+        }
 
         for (int i = 0; i < movementTypes.length; i++) {
             switch (movementTypes[i]) {

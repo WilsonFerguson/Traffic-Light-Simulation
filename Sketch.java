@@ -57,9 +57,9 @@ class Sketch extends Applet {
     public static int weightPerson = 1;
     public static int weightPersonSpecial = 5;
 
-    double personCreationChance = 0.017; // Chance for person to be spawned each frame
-    double personCarChance = 0.8; // Chance for person to be a car
-    double personRoads02Chance = 0.875; // Chance for person to be on roads 0 or 2 (main roads)
+    double personCreationChance = 0.015; // Chance for person to be spawned each frame
+    double personCarChance = 0.9; // Chance for person to be a car
+    double personRoads02Chance = 0.7; // Chance for person to be on roads 0 or 2 (main roads)
     double personSpecialChance = 0.025; // Chance for person to be a special vehicle
 
     // Defaults:
@@ -77,6 +77,9 @@ class Sketch extends Applet {
     public static int laneWidthPed = laneWidthBike;
     public static float centerMedian;
 
+    public static PVector stopLineBottomRight;
+    public static PVector stopLineTopLeft;
+
     PhaseEditor phaseEditor;
 
     public void setup() {
@@ -87,6 +90,8 @@ class Sketch extends Applet {
             maximumTypicalGreenTime = 20 * 60;
 
         centerMedian = width / 15;
+        stopLineBottomRight = new PVector(width / 2 + centerMedian * 3 / 2, height / 2 + centerMedian * 3 / 2);
+        stopLineTopLeft = new PVector(width / 2 - centerMedian * 3 / 2, height / 2 - centerMedian * 3 / 2);
 
         movements = new ArrayList<Movement>();
         movementsCars = new ArrayList<Movement>();
@@ -197,6 +202,24 @@ class Sketch extends Applet {
         IntersectionManager.movements.clear();
         IntersectionManager.currentPhaseIndex = 0;
         IntersectionManager.started = false;
+    }
+
+    public void updateStopLines() {
+        clearExistingMovements();
+
+        List<MovementType>[] roadMovementTypes = new ArrayList[4];
+        for (int i = 0; i < roadMovementTypes.length; i++) {
+            roadMovementTypes[i] = new ArrayList<>(Arrays.asList(roads[i].movementTypes));
+        }
+
+        for (int i = 0; i < roads.length; i++) {
+            roads[i].movements.clear();
+            roads[i].x = roads[i].getInitialX();
+            roads[i].addMovements(roadMovementTypes[i].toArray(new MovementType[0]));
+        }
+
+        instantiateRoads();
+        IntersectionManager.movements = movements;
     }
 
     public void updateRoadsAddition(int roadIndex, MovementType type, Direction direction) {
@@ -513,8 +536,14 @@ class Sketch extends Applet {
         rectMode(CORNER);
 
         fill(Settings.ROAD_BACKGROUND);
-        PVector topLeft = new PVector(roads[2].getLastMovement().path.get(0).x, roads[1].getLastMovement().path.get(0).y).sub(laneWidthCar / 2, laneWidthCar / 2);
-        PVector bottomRight = new PVector(roads[0].getLastMovement().path.get(0).x, roads[3].getLastMovement().path.get(0).y).add(laneWidthCar / 2, laneWidthCar / 2);
+
+        float topLeftX = width / 2 - abs(height / 2 - roads[3].getStopLineCars());
+        float topLeftY = height / 2 - abs(height / 2 - roads[2].getStopLineCars());
+        float bottomRightX = width / 2 + abs(height / 2 - roads[1].getStopLineCars());
+        float bottomRightY = height / 2 + abs(height / 2 - roads[0].getStopLineCars());
+
+        PVector topLeft = new PVector(topLeftX, topLeftY).sub(laneWidthCar / 2, laneWidthCar / 2);
+        PVector bottomRight = new PVector(bottomRightX, bottomRightY).add(laneWidthCar / 2, laneWidthCar / 2);
         rect(topLeft, PVector.sub(bottomRight, topLeft));
     }
 
@@ -623,16 +652,24 @@ class Sketch extends Applet {
 
         Movement movement = null;
         Road road;
+        while (true) {
         if (random(1) < personRoads02Chance) {
             road = roads[random(new int[] { 0, 2 })];
         } else {
             road = roads[random(new int[] { 1, 3 })];
         }
+        if (road.movementTypes.length != 0)
+            break;
+        }
         int index = 0;
+        if (road.indexBikes != -1) {
         if (random(1) < personCarChance) {
             index = (int) random(road.indexBikes);
         } else {
             index = (int) random(road.indexBikes, road.movementTypes.length);
+        }
+        } else {
+            index = (int) random(road.movementTypes.length);
         }
         MovementType type = road.movementTypes[index];
         if (type == MovementType.CAR_LEFT)

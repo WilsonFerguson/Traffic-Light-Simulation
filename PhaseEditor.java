@@ -16,6 +16,10 @@ class PhaseEditor extends PComponent {
     int editing = -1;
     boolean active = false;
 
+    // Stop lines
+    float stopLineButtonRadius = 10;
+    boolean draggingButton = false;
+
     public PhaseEditor(Sketch sketch) {
         this.sketch = sketch;
 
@@ -174,6 +178,39 @@ class PhaseEditor extends PComponent {
 
     public void draw() {
         panel.draw();
+
+        if (isActive()) {
+            noStroke();
+            fill(36, 169, 209);
+            circle(Sketch.stopLineTopLeft, stopLineButtonRadius);
+            circle(Sketch.stopLineBottomRight, stopLineButtonRadius);
+
+            if (mousePressed) {
+                float distTL = PVector.dist(mouse, Sketch.stopLineTopLeft);
+                float distBR = PVector.dist(mouse, Sketch.stopLineBottomRight);
+
+                if (draggingButton) {
+                    if (distTL < distBR) {
+                        Sketch.stopLineTopLeft = mouse.copy();
+                    } else {
+                        Sketch.stopLineBottomRight = mouse.copy();
+                    }
+                } else {
+                    if (distTL < stopLineButtonRadius) {
+                        draggingButton = true;
+                        Sketch.stopLineTopLeft = mouse.copy();
+                    } else if (distBR < stopLineButtonRadius) {
+                        draggingButton = true;
+                        Sketch.stopLineBottomRight = mouse.copy();
+                    }
+                }
+            } else {
+                if (draggingButton) {
+                    draggingButton = false;
+                    sketch.updateStopLines();
+                }
+            }
+        }
     }
 
     public void mousePressed() {
