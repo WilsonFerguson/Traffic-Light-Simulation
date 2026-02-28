@@ -48,7 +48,7 @@ class Sketch extends Applet {
      * After turning red and being fully done, it has to wait this long before it
      * can turn back green (Haarlem intersection style)
      */
-    public static int redWaitTime = 1 * 60;
+    public static int redWaitTime = (int) Math.ceil(1.2 * 60);
     public static int phaseExtensionAllowance = 4 * 60; // Additional seconds that a phase can be extended, beyond the
                                                         // typical green, for special vehicles
 
@@ -58,7 +58,7 @@ class Sketch extends Applet {
     public static int weightPersonSpecial = 5;
 
     double personCreationChance = 0.015; // Chance for person to be spawned each frame
-    double personCarChance = 0.9; // Chance for person to be a car
+    double personCarChance = 0.6; // Chance for person to be a car
     double personRoads02Chance = 0.7; // Chance for person to be on roads 0 or 2 (main roads)
     double personSpecialChance = 0.025; // Chance for person to be a special vehicle
 
@@ -115,21 +115,39 @@ class Sketch extends Applet {
         MovementType PD = MovementType.PEDESTRIAN;
 
         roads = new Road[4];
-        roads[0] = new Road(0, Origin.SOUTH).addMovements(CL, CS, CS, CR, BS, PD, PD);
-        roads[1] = new Road(-PI / 2, Origin.EAST).addMovements(CL, CS, CS, CR, BS, PD, PD);
-        roads[2] = new Road(PI, Origin.NORTH).addMovements(CL, CS, CS, CR, BS, PD, PD);
-        roads[3] = new Road(PI / 2, Origin.WEST).addMovements(CL, CS, CS, CR, BS, PD, PD);
+        // roads[0] = new Road(0, Origin.SOUTH).addMovements(CL, CS, CS, CR, BS, PD,
+        // PD);
+        // roads[1] = new Road(-PI / 2, Origin.EAST).addMovements(CL, CS, CS, CR, BS,
+        // PD, PD);
+        // roads[2] = new Road(PI, Origin.NORTH).addMovements(CL, CS, CS, CR, BS, PD,
+        // PD);
+        // roads[3] = new Road(PI / 2, Origin.WEST).addMovements(CL, CS, CS, CR, BS, PD,
+        // PD);
+        roads[0] = new Road(0, Origin.SOUTH).addMovements(CL, CS, BS, PD, PD);
+        roads[1] = new Road(-PI / 2, Origin.EAST).addMovements(CL, CS, CR, BS, PD, PD);
+        roads[2] = new Road(PI, Origin.NORTH).addMovements(CS, CR, BS, PD, PD);
+        roads[3] = new Road(PI / 2, Origin.WEST).addMovements(CL, CR, BS, PD, PD);
 
         instantiateRoads();
 
         IntersectionManager.movements = movements;
         if (!tegelijkGroen) {
+            // Phase phase1 = createPhase(new PhaseDirection(0, CS, BS, PD), new
+            // PhaseDirection(2, CS, BS, PD));
+            // Phase phase2 = createPhase(new PhaseDirection(0, CL, CR), new
+            // PhaseDirection(2, CL, CR),
+            // new PhaseDirection(1, CR), new PhaseDirection(3, CR));
+            // Phase phase3 = createPhase(new PhaseDirection(1, CS, BS, PD), new
+            // PhaseDirection(3, CS, BS, PD));
+            // Phase phase4 = createPhase(new PhaseDirection(1, CL, CR), new
+            // PhaseDirection(3, CL, CR),
+            // new PhaseDirection(0, CR), new PhaseDirection(2, CR));
             Phase phase1 = createPhase(new PhaseDirection(0, CS, BS, PD), new PhaseDirection(2, CS, BS, PD));
-            Phase phase2 = createPhase(new PhaseDirection(0, CL, CR), new PhaseDirection(2, CL, CR),
-                    new PhaseDirection(1, CR), new PhaseDirection(3, CR));
-            Phase phase3 = createPhase(new PhaseDirection(1, CS, BS, PD), new PhaseDirection(3, CS, BS, PD));
-            Phase phase4 = createPhase(new PhaseDirection(1, CL, CR), new PhaseDirection(3, CL, CR),
-                    new PhaseDirection(0, CR), new PhaseDirection(2, CR));
+            Phase phase2 = createPhase(new PhaseDirection(0, CL, BS, PD), new PhaseDirection(3, CR),
+                    new PhaseDirection(1, BS, PD));
+            Phase phase3 = createPhase(new PhaseDirection(0, BS, PD), new PhaseDirection(2, CR),
+                    new PhaseDirection(3, CL, BS, PD));
+            Phase phase4 = createPhase(new PhaseDirection(1, CL, CS, CR));
 
             IntersectionManager.addPhases(phase1, phase2, phase3, phase4);
         } else {
@@ -429,25 +447,26 @@ class Sketch extends Applet {
             person.draw();
         }
 
-        // // Label road numbers (debugging)
-        // for (int i = 0; i < movements.size(); i++) {
-        // fill(255);
-        // textSize(30);
-        // textAlign(CENTER);
-        // text(i, PVector.add(movements.get(i).pathIntro.get(0),
-        // PVector.sub(PVector.center(),
-        // movements.get(i).pathIntro.get(0)).setMag(30)));
-        // }
-
-        // Draw weights (debugging/BTS info)
-        for (int i = 0; i < IntersectionManager.phases.size(); i++) {
+        // Label road numbers (debugging)
+        for (int i = 0; i < movements.size(); i++) {
             fill(255);
             textSize(30);
-            textAlign(LEFT);
-            text(IntersectionManager.phases.get(i).weight, 10,
-                    height - (textAscent() + textDescent() * IntersectionManager.phases.size() * 0.7f)
-                            * (IntersectionManager.phases.size() - i - 0.5));
+            textAlign(CENTER);
+            text(i, PVector.add(movements.get(i).pathIntro.get(0),
+                    PVector.sub(PVector.center(),
+                            movements.get(i).pathIntro.get(0)).setMag(30)));
         }
+
+        // Draw weights (debugging/BTS info)
+        // for (int i = 0; i < IntersectionManager.phases.size(); i++) {
+        // fill(255);
+        // textSize(30);
+        // textAlign(LEFT);
+        // text(IntersectionManager.phases.get(i).weight, 10,
+        // height - (textAscent() + textDescent() * IntersectionManager.phases.size() *
+        // 0.7f)
+        // * (IntersectionManager.phases.size() - i - 0.5));
+        // }
 
         textSize(50);
         fill(255);
@@ -544,7 +563,9 @@ class Sketch extends Applet {
 
         PVector topLeft = new PVector(topLeftX, topLeftY).sub(laneWidthCar / 2, laneWidthCar / 2);
         PVector bottomRight = new PVector(bottomRightX, bottomRightY).add(laneWidthCar / 2, laneWidthCar / 2);
-        rect(topLeft, PVector.sub(bottomRight, topLeft));
+        // rect(topLeft, PVector.sub(bottomRight, topLeft));
+        rect(topLeft.x, 0, bottomRight.x - topLeft.x, height);
+        rect(0, topLeft.y, width, bottomRight.y - topLeft.y);
     }
 
     String temp = "";
@@ -574,11 +595,11 @@ class Sketch extends Applet {
         if (phaseEditor.isActive())
             return;
 
-        int[] carIndices = new int[movementsCars.size()];
-        for (int i = 0; i < carIndices.length; i++) {
-            carIndices[i] = movementsCars.get(i).id;
+        for (Movement movement : movements) {
+            if (movement.hover()) {
+                createPerson(true, movement.id);
+            }
         }
-        createPerson(true, carIndices);
     }
 
     public Movement highlightMovement() {
@@ -644,6 +665,9 @@ class Sketch extends Applet {
 
         person = new Person(movement, speed, acceleration, special);
         traffic.add(person);
+
+        // println(frameCount + ": " + person.movement.origin + " | " +
+        // person.movement.direction);
     }
 
     public Movement generateMovement(int... indexArray) {
@@ -653,21 +677,21 @@ class Sketch extends Applet {
         Movement movement = null;
         Road road;
         while (true) {
-        if (random(1) < personRoads02Chance) {
-            road = roads[random(new int[] { 0, 2 })];
-        } else {
-            road = roads[random(new int[] { 1, 3 })];
-        }
-        if (road.movementTypes.length != 0)
-            break;
+            if (random(1) < personRoads02Chance) {
+                road = roads[random(new int[] { 0, 2 })];
+            } else {
+                road = roads[random(new int[] { 1, 3 })];
+            }
+            if (road.movementTypes.length != 0)
+                break;
         }
         int index = 0;
         if (road.indexBikes != -1) {
-        if (random(1) < personCarChance) {
-            index = (int) random(road.indexBikes);
-        } else {
-            index = (int) random(road.indexBikes, road.movementTypes.length);
-        }
+            if (random(1) < personCarChance) {
+                index = (int) random(road.indexBikes);
+            } else {
+                index = (int) random(road.indexBikes, road.movementTypes.length);
+            }
         } else {
             index = (int) random(road.movementTypes.length);
         }

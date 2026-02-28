@@ -10,6 +10,6 @@ class Settings {
     public static color PATH_BIKE = new color(189, 74, 66);
     public static color PATH_CAR = new color(61);
     public static color PATH_PED = new color(75);
-    public static color ROAD_BACKGROUND = new color(100);
+    public static color ROAD_BACKGROUND = new color(22, 115, 6);
     public static color PATH_HIGHLIGHT = new color(101, 144, 230);
 }

@@ -4,18 +4,21 @@ import java.util.*;
 class Phase extends PComponent implements EventIgnorer {
 
     ArrayList<Movement> movements;
+
     int defaultTime;
     int maximumTypicalGreenTime;
     int maximumRealizedGreenTime;
     int minimumRealizedGreenTime;
+
     HashSet<Person> specialPersonsExtended = new HashSet<Person>();
+
     boolean activePhase = false;
     int phaseStartTime = -1;
 
-    int weight = 0;
-
     public Phase(int maximumTypicalGreenTime, ArrayList<Movement> allMovements, int... indices) {
+        this.minimumRealizedGreenTime = Sketch.greenTime;
         this.maximumTypicalGreenTime = maximumTypicalGreenTime;
+        this.maximumRealizedGreenTime = maximumTypicalGreenTime;
         movements = new ArrayList<Movement>();
 
         for (int index : indices) {
@@ -24,98 +27,143 @@ class Phase extends PComponent implements EventIgnorer {
     }
 
     public Phase(int maximumTypicalGreenTime, ArrayList<Movement> allMovements, ArrayList<Movement> phase) {
+        this.minimumRealizedGreenTime = Sketch.greenTime;
         this.maximumTypicalGreenTime = maximumTypicalGreenTime;
+        this.maximumRealizedGreenTime = maximumTypicalGreenTime;
         movements = new ArrayList<Movement>();
         movements = new ArrayList<Movement>(phase);
     }
 
-    public void addMovement(Movement movement) {
-        movements.add(movement);
-        defaultTime = max(defaultTime, movement.getTime(maximumTypicalGreenTime));
-    }
-
-    public void begin(Phase outboundPhase) {
-        // The minimum time for this phase is the one for which all phases can just
-        // barely get a green.
-        minimumRealizedGreenTime = frameCount;
-        for (Movement movement : movements) {
-            minimumRealizedGreenTime = max(minimumRealizedGreenTime, movement.begin(this, outboundPhase));
-        }
-        minimumRealizedGreenTime += -frameCount + 1 + Sketch.greenTime;
-        setRealizedGreenTime(maximumTypicalGreenTime);
-        specialPersonsExtended.clear();
+    public void begin() {
         activePhase = true;
         phaseStartTime = frameCount;
+        minimumRealizedGreenTime = Sketch.greenTime;
 
-        weight = 0;
+        for (Movement movement : movements) {
+            movement.phase = this;
+            if (!movement.waitingTraffic() || movement.signal == Signal.GREEN)
+                continue;
+
+            movement.queueGreen();
+        }
     }
 
-    public void end(boolean callEnd) {
+    public void end() {
+        activePhase = false;
+        phaseStartTime = -1;
+
         for (Movement movement : movements) {
-            if (callEnd)
-                movement.end();
             movement.phase = null;
         }
-        activePhase = false;
-
-        weight = 0;
     }
 
-    public void setRealizedGreenTime(int realizedGreenTime) {
-        maximumRealizedGreenTime = realizedGreenTime;
-        // Ensure that the realized time is at least the minimum time
-        maximumRealizedGreenTime = max(maximumRealizedGreenTime, minimumRealizedGreenTime);
-    }
+    // public void setRealizedGreenTime(int realizedGreenTime) {
+    // maximumRealizedGreenTime = realizedGreenTime;
+    // // Ensure that the realized time is at least the minimum time
+    // maximumRealizedGreenTime = max(maximumRealizedGreenTime,
+    // minimumRealizedGreenTime);
+    // }
 
     public void update() {
         for (Movement movement : movements) {
             movement.update();
 
-            if (movement.hasSpecialPerson()) {
-                // // Don't calculate the extension multiple times for the same person
-                // if (specialPersonsExtended.contains(movement.specialPerson))
-                // continue;
+            // if (movement.hasSpecialPerson()) {
+            // // // Don't calculate the extension multiple times for the same person
+            // // if (specialPersonsExtended.contains(movement.specialPerson))
+            // // continue;
+            //
+            // int neededMaxGreenTime = movement.getSpecialPersonToIntersectionTime() +
+            // (frameCount - phaseStartTime);
+            // boolean canExtend = neededMaxGreenTime - maximumTypicalGreenTime <
+            // Sketch.phaseExtensionAllowance;
+            // if (canExtend && neededMaxGreenTime > maximumRealizedGreenTime) {
+            // setRealizedGreenTime(neededMaxGreenTime);
+            // IntersectionManager.reportExtededPhase();
+            // }
+            //
+            // // Even if it we couldn't extend the phase, we have still accounted for this
+            // // person
+            // specialPersonsExtended.add(movement.specialPerson);
+            // }
+        }
 
-                int neededMaxGreenTime = movement.getSpecialPersonToIntersectionTime() + (frameCount - phaseStartTime);
-                boolean canExtend = neededMaxGreenTime - maximumTypicalGreenTime < Sketch.phaseExtensionAllowance;
-                if (canExtend && neededMaxGreenTime > maximumRealizedGreenTime) {
-                    setRealizedGreenTime(neededMaxGreenTime);
-                    IntersectionManager.reportExtededPhase();
+        if (activePhase) {
+            updateActivePhase();
+        } else {
+            updateInactivePhase();
+        }
+    }
+
+    public void updateActivePhase() {
+        for (Movement movement : movements) {
+            if (movement.wantsGreen) {
+                int earliestGreenTime = movement.getEarliestGreenTime();
+                if (earliestGreenTime + movement.greenMinimumTime < phaseStartTime + maximumRealizedGreenTime) {
+                    for (Movement m : movement.getConflictingMovements()) {
+                        if (m.signal == Signal.GREEN) {
+                            m.queueYellow();
+                        } else if (m.signal == Signal.RED && m.newSignal == Signal.GREEN) {
+                            m.newSignal = null;
+                            m.newSignalChangeTime = -1;
+                        }
+                    }
+                    movement.queueGreen();
                 }
-
-                // Even if it we couldn't extend the phase, we have still accounted for this
-                // person
-                specialPersonsExtended.add(movement.specialPerson);
             }
         }
 
-        // If everyone is changing red, then we can stop this phase
-        if (activePhase) {
-            boolean everyoneChangingRed = true;
-            for (Movement movement : movements) {
-                if (!movement.changingRed && movement.signal != Signal.RED || movement.changingGreen) {
-                    everyoneChangingRed = false;
+        boolean allNonGreen = true;
+        for (Movement m : movements) {
+            if (m.signal == Signal.GREEN || m.newSignal == Signal.GREEN) {
+                allNonGreen = false;
+                break;
+            }
+        }
+        if ((allNonGreen && frameCount >= phaseStartTime + minimumRealizedGreenTime)
+                || frameCount >= phaseStartTime + maximumRealizedGreenTime) {
+            end();
+        }
+    }
+
+    public void updateInactivePhase() {
+        for (Movement movement : movements) {
+            if (!movement.wantsGreen)
+                continue;
+
+            boolean canTurnGreen = true;
+            for (Movement m : movement.getConflictingMovements()) {
+                if (m.signal == Signal.GREEN || m.newSignal == Signal.GREEN) {
+                    canTurnGreen = false;
                     break;
                 }
             }
-            if (everyoneChangingRed) {
-                end(false);
-            }
-        } else {
-            // Weight calculation
-            weight = 0;
-            for (Movement movement : movements) {
-                for (Person person : movement.getWaitingTraffic()) {
-                    if (person.special)
-                        weight += person.age * Sketch.weightPersonSpecial;
-                    else
-                        weight += person.age * Sketch.weightPerson;
-                }
-            }
-        }
+            if (!canTurnGreen)
+                continue;
 
-        if (activePhase && frameCount >= phaseStartTime + maximumRealizedGreenTime) {
-            end(true);
+            int earliestGreenTime = movement.getEarliestGreenTime();
+            Phase currentPhase = IntersectionManager.phases.get(IntersectionManager.currentPhaseIndex);
+
+            boolean canFitInCurrentPhase = earliestGreenTime + movement.greenMinimumTime < currentPhase.phaseStartTime
+                    + currentPhase.maximumRealizedGreenTime;
+            boolean inNextPhase = IntersectionManager.phases
+                    .get(IntersectionManager.getProbabilisticNextPhase()).movements.contains(movement);
+            boolean noConflictWithNextPhase = true;
+            for (Movement m : movement.getConflictingMovements()) {
+                if (!IntersectionManager.phases.get(IntersectionManager.getProbabilisticNextPhase()).movements
+                        .contains(m))
+                    continue;
+
+                noConflictWithNextPhase = false;
+                break;
+            }
+            canTurnGreen = canFitInCurrentPhase || inNextPhase || noConflictWithNextPhase;
+
+            if (canTurnGreen) {
+                movement.queueGreen();
+                currentPhase.minimumRealizedGreenTime = max(currentPhase.minimumRealizedGreenTime,
+                        earliestGreenTime + movement.greenMinimumTime);
+            }
         }
     }
 

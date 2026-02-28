@@ -20,118 +20,144 @@ class IntersectionManager extends PComponent implements EventIgnorer {
     }
 
     public static void start() {
-        phases.get(currentPhaseIndex).begin(null);
+        currentPhaseIndex = 0;
+        phases.get(currentPhaseIndex).begin();
+        turnConflictingMovementsRed();
         started = true;
     }
 
     public static void nextPhase() {
         int next = getProbabilisticNextPhase();
 
-        // End all spliced in movements
-        for (Movement movement : movements) {
-            // If the movement is in the new phase, then it's fine
-            if (phases.get(next).movements.contains(movement))
-                continue;
-
-            if ((movement.phase == null || !movement.phase.activePhase) && !movement.changingRed
-                    && movement.signal == Signal.GREEN) {
-                movement.end();
-            }
-        }
-        phases.get(currentPhaseIndex).end(true);
-        phases.get(next).begin(phases.get(currentPhaseIndex));
+        phases.get(currentPhaseIndex).end();
+        currentPhaseIndex = next;
+        turnConflictingMovementsRed();
+        phases.get(currentPhaseIndex).begin();
 
         Sketch.phaseModifications = new boolean[3];
 
-        // If the new phase doesn't have a special person, then if another phase has a
-        // special vehicle waiting: then we will shorten this phase to the minimum
-        // green.
-        // Note: if a special vehicle comes within this short window it will indeed
-        // extend the phase
-        if (!phases.get(next).hasSpecialPerson()) {
-            for (Phase phase : phases) {
-                if (phase.hasSpecialPerson()) {
-                    shortenPhase(phases.get(next));
-                    break;
+        // // If the new phase doesn't have a special person, then if another phase has
+        // a
+        // // special vehicle waiting: then we will shorten this phase to the minimum
+        // // green.
+        // // Note: if a special vehicle comes within this short window it will indeed
+        // // extend the phase
+        // if (!phases.get(currentPhaseIndex).hasSpecialPerson()) {
+        // for (Phase phase : phases) {
+        // if (phase.hasSpecialPerson()) {
+        // shortenPhase(phases.get(currentPhaseIndex));
+        // break;
+        // }
+        // }
+        // }
+    }
+
+    private static void turnConflictingMovementsRed() {
+        ArrayList<Movement> turningGreens = new ArrayList<>();
+        for (Movement movement : movements) {
+            if (movement.newSignal == Signal.GREEN && !phases.get(currentPhaseIndex).movements.contains(movement))
+                turningGreens.add(movement);
+        }
+
+        // Go through each movement that conflicts with a movement that is going to turn
+        // green and make it red
+        // Also: any movement that is turning green, if it conflicts with an upcoming
+        // phase movement then stop it
+        for (Movement movement : phases.get(currentPhaseIndex).movements) {
+            if (!movement.waitingTraffic())
+                continue;
+
+            ArrayList<Conflict> conflicts = movement.getRelevantConflictingMovements();
+            for (Conflict conflict : conflicts) {
+                Movement conflictingMovement = conflict.conflictingMovement;
+                if (conflictingMovement.signal != Signal.GREEN)
+                    continue;
+
+                conflictingMovement.queueYellow();
+            }
+
+            for (int i = turningGreens.size() - 1; i >= 0; i--) {
+                if (movement.clearanceTimes.containsKey(turningGreens.get(i))) {
+                    movement.newSignal = null;
+                    movement.newSignalChangeTime = -1;
+                    turningGreens.remove(i);
                 }
             }
         }
-
-        currentPhaseIndex = next;
     }
 
     public static int getProbabilisticNextPhase() {
         // ------Go to the next phase in order, skip empty ones:-------
-        // int next = (currentPhaseIndex + 1) % phases.size();
-        //
-        // // If all of the movements in the new phase have no traffic, go to the next
+        int next = (currentPhaseIndex + 1) % phases.size();
+
+        // If all of the movements in the new phase have no traffic, go to the next
         // one.
-        // // If this is true for all phases, then just stay where we are.
-        // while (true) {
-        // // The next phase has traffic, so return it
-        // for (Movement movement : phases.get(next).movements) {
-        // if (movement.waitingTraffic()) {
-        // return next;
-        // }
-        // }
-        //
-        // // Advance the phase
-        // next = (next + 1) % phases.size();
-        // if (next == currentPhaseIndex) {
-        // // next = (next + 1) % phases.size();
-        // break;
-        // }
-        // }
-        //
-        // return next;
+        // If this is true for all phases, then just stay where we are.
+        while (true) {
+            // The next phase has traffic, so return it
+            for (Movement movement : phases.get(next).movements) {
+                if (movement.waitingTraffic()) {
+                    return next;
+                }
+            }
+
+            // Advance the phase
+            next = (next + 1) % phases.size();
+            if (next == currentPhaseIndex) {
+                // next = (next + 1) % phases.size();
+                break;
+            }
+        }
+
+        return next;
 
         // ------Go to phase with highest weight (exclude the current phase)-------
-        HashMap<Integer, Integer> weights = new HashMap<>();
-        for (int i = 0; i < phases.size(); i++) {
-            weights.put(i, phases.get(i).weight);
-        }
-
-        ArrayList<Integer> sortedWeights = new ArrayList<>(weights.keySet());
-        Collections.sort(sortedWeights, new Comparator<Integer>() {
-            @Override
-            public int compare(Integer o1, Integer o2) {
-                return weights.get(o2) - weights.get(o1);
-            }
-        });
-
-        while (sortedWeights.size() > 0) {
-            int next = sortedWeights.get(0);
-
-            // If the best phase just has 0 weight, we won't change phases.
-            if (weights.get(next) == 0)
-                return currentPhaseIndex;
-
-            if (next != currentPhaseIndex)
-                return next;
-
-            sortedWeights.remove(0);
-        }
-
-        // No good phase found so we just stay where we are
-        return currentPhaseIndex;
+        // HashMap<Integer, Integer> weights = new HashMap<>();
+        // for (int i = 0; i < phases.size(); i++) {
+        // weights.put(i, phases.get(i).weight);
+        // }
+        //
+        // ArrayList<Integer> sortedWeights = new ArrayList<>(weights.keySet());
+        // Collections.sort(sortedWeights, new Comparator<Integer>() {
+        // @Override
+        // public int compare(Integer o1, Integer o2) {
+        // return weights.get(o2) - weights.get(o1);
+        // }
+        // });
+        //
+        // while (sortedWeights.size() > 0) {
+        // int next = sortedWeights.get(0);
+        //
+        // // If the best phase just has 0 weight, we won't change phases.
+        // if (weights.get(next) == 0)
+        // return currentPhaseIndex;
+        //
+        // if (next != currentPhaseIndex)
+        // return next;
+        //
+        // sortedWeights.remove(0);
+        // }
+        //
+        // // No good phase found so we just stay where we are
+        // return currentPhaseIndex;
     }
 
-    public static void requestShortenedPhase() {
-        if (phases.get(currentPhaseIndex).hasSpecialPerson())
-            return;
-
-        shortenPhase(phases.get(currentPhaseIndex));
-    }
-
-    private static void shortenPhase(Phase phase) {
-        phase.setRealizedGreenTime(Sketch.greenTime);
-        Sketch.phaseModifications[0] = true;
-        for (Phase p : phases) {
-            for (Movement movement : p.movements) {
-                movement.notifyShortenedPhase();
-            }
-        }
-    }
+    // public static void requestShortenedPhase() {
+    // if (phases.get(currentPhaseIndex).hasSpecialPerson())
+    // return;
+    //
+    // shortenPhase(phases.get(currentPhaseIndex));
+    // }
+    //
+    // private static void shortenPhase(Phase phase) {
+    // phase.setRealizedGreenTime(Sketch.greenTime);
+    // Sketch.phaseModifications[0] = true;
+    // for (Phase p : phases) {
+    // for (Movement movement : p.movements) {
+    // movement.notifyShortenedPhase();
+    // }
+    // }
+    // }
 
     public static void reportExtededPhase() {
         Sketch.phaseModifications[1] = true;
@@ -145,10 +171,67 @@ class IntersectionManager extends PComponent implements EventIgnorer {
             phase.update();
         }
 
+        // conflictResolutions();
+
         // There was no traffic so every light of the active phase is turning red
         if (!phases.get(currentPhaseIndex).activePhase) {
             nextPhase();
         }
     }
 
+    /**
+     * I think when two movements get the clear to turn green at the same time, they
+     * then well both turn green. We will resolve this
+     */
+    public static void conflictResolutions() {
+        // First prioritize the active phase
+        for (Movement movement : phases.get(currentPhaseIndex).movements) {
+            if (movement.newSignal != Signal.GREEN)
+                continue;
+
+            for (Movement m : movement.getConflictingMovements()) {
+                if (m.newSignal == Signal.GREEN) {
+                    m.newSignal = null;
+                    m.newSignalChangeTime = -1;
+                }
+            }
+        }
+
+        // then prioritize the next phase
+        for (Movement movement : phases.get(getProbabilisticNextPhase()).movements) {
+            if (movement.newSignal != Signal.GREEN)
+                continue;
+
+            for (Movement m : movement.getConflictingMovements()) {
+                if (m.newSignal == Signal.GREEN) {
+                    m.newSignal = null;
+                    m.newSignalChangeTime = -1;
+                }
+            }
+        }
+
+        // Now we keep going until all conflicts are resolved
+        while (true) {
+            boolean allResolved = true;
+            for (Movement movement : movements) {
+                if (movement.newSignal != Signal.GREEN)
+                    continue;
+
+                for (Movement m : movement.getConflictingMovements()) {
+                    if (m.newSignal == Signal.GREEN) {
+                        allResolved = false;
+                        m.newSignal = null;
+                        m.newSignalChangeTime = -1;
+                        break;
+                    }
+                }
+
+                if (!allResolved)
+                    break;
+            }
+
+            if (allResolved)
+                break;
+        }
+    }
 }

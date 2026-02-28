@@ -459,7 +459,7 @@ public class Road extends PComponent implements EventIgnorer {
         float radiusX = abs(end.x - start.x);
         float radiusY = abs(end.y - start.y);
 
-        int n = 50;
+        int n = 65;
         for (int i = 0; i <= n; i++) {
             float angle = map(i, 0, n, 0, PI / 2);
 
@@ -484,7 +484,7 @@ public class Road extends PComponent implements EventIgnorer {
         float x = movementStartPointsX[index];
 
         generateStraightIntros(movement, 15, x, stopLine);
-        int n = 40;
+        int n = 60;
         for (int i = 0; i <= n; i++) {
             movement.addIntersectionNode(x, map(i, 0, n, stopLine, movementEndpoints[index].y));
         }
@@ -508,7 +508,7 @@ public class Road extends PComponent implements EventIgnorer {
         float radiusX = abs(end.x - start.x);
         float radiusY = abs(end.y - start.y);
 
-        int n = 22;
+        int n = 40;
         for (int i = 0; i <= n; i++) {
             float angle = map(i, 0, n, PI, PI / 2);
 
@@ -533,7 +533,7 @@ public class Road extends PComponent implements EventIgnorer {
         float x = movementStartPointsX[index];
 
         generateStraightIntros(movement, 40, x, stopLine);
-        int n = 50;
+        int n = 65;
         for (int i = 0; i <= n; i++) {
             movement.addIntersectionNode(x, map(i, 0, n, stopLine, movementEndpoints[index].y));
         }
@@ -559,7 +559,7 @@ public class Road extends PComponent implements EventIgnorer {
         float radiusX = abs(end.x - start.x);
         float radiusY = abs(end.y - start.y);
 
-        int n = 48;
+        int n = 75;
         for (int i = 0; i <= n; i++) {
             float theta = map(i, 0, n, 0, PI / 2);
             float xTemp = end.x + radiusX * cos(theta);
@@ -651,5 +651,4 @@ public class Road extends PComponent implements EventIgnorer {
 
         return null;
     }
-
 }
